@@ -1,7 +1,7 @@
 name: App per Mac
 
 # Compila TeleMac.app su un Mac di GitHub, la firma come "Edoardo Ciarlo" e
-# prepara TeleMac.dmg. Sul ramo main la pubblica anche come release, così si
+# prepara TeleMac.dmg. Sul ramo principale la pubblica anche come release, così si
 # scarica sempre da: https://github.com/TroppoGanzo/TeleMac/releases/latest
 #
 # Firma (secrets del repository, tutti facoltativi):
@@ -17,7 +17,9 @@ name: App per Mac
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - claude/iphone-mac-remote-control-orilyq
   pull_request:
   workflow_dispatch:
 
@@ -116,7 +118,7 @@ jobs:
             build/TeleMac.zip
 
       - name: Pubblica la release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v4.0.${{ env.TELEMAC_BUILD }}
