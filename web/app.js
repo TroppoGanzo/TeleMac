@@ -28,7 +28,7 @@ function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
 const SETTINGS_KEY = "telemac-settings";
 const TOKEN_KEY = "telemac-token";
-const DEFAULT_SETTINGS = { pointerOn: true, sensitivity: 20, invertX: false, invertY: false, playMode: "media", vibration: true };
+const DEFAULT_SETTINGS = { pointerOn: true, stabilization: 0.5, cursorScale: 2.5, sensitivity: 20, invertX: false, invertY: false, playMode: "media", vibration: true };
 
 function loadSettings() {
   try {
@@ -169,7 +169,7 @@ function loadAxes() {
 const savedAxes = loadAxes();
 
 const pointerEngine = window.TeleMacPointer.createPointer({
-  getSettings: () => ({ sensitivity: settings.sensitivity, invertX: settings.invertX, invertY: settings.invertY }),
+  getSettings: () => ({ sensitivity: settings.sensitivity, invertX: settings.invertX, invertY: settings.invertY, stabilization: settings.stabilization }),
   now: () => performance.now(),
   axes: savedAxes || { map: "xyz", sign: 1 },
   autoDetect: !savedAxes,
@@ -207,6 +207,12 @@ async function askMotionPermission() {
   return motionGranted;
 }
 
+// Cursore del Mac ingrandito mentre usi il puntatore (così lo vedi dal divano).
+let cursorWarned = false;
+function syncCursorSize() {
+  send({ type: "cursor", scale: pointerOn ? settings.cursorScale : 1 });
+}
+
 function setPointerOn(on) {
   pointerOn = on;
   settings.pointerOn = on;
@@ -214,6 +220,7 @@ function setPointerOn(on) {
   pointerEngine.setEnabled(on);
   $("#btn-power").setAttribute("aria-checked", on ? "true" : "false");
   clickpad.classList.toggle("pointer-off", !on);
+  syncCursorSize();
 }
 
 async function togglePointer() {
@@ -346,6 +353,7 @@ function handleServerMessage(msg) {
   if (!msg || typeof msg !== "object") return;
   if (msg.type === "hello") {
     hidePairing();
+    syncCursorSize();
     island.show({ text: "Collegato a " + (msg.name || "Mac"), tone: "ok", ms: 1800 });
     if (msg.accessibility === false) {
       setTimeout(() => {
@@ -355,6 +363,9 @@ function handleServerMessage(msg) {
   } else if (msg.type === "auth" && msg.ok === false) {
     setToken(null);
     showPairing();
+  } else if (msg.type === "cursor" && msg.ok === false && !cursorWarned) {
+    cursorWarned = true;
+    island.show({ text: "Questo Mac non permette di ingrandire il cursore", tone: "warn", ms: 3000 });
   }
   // "pong": non serve fare nulla, è solo la conferma che la linea è viva.
 }
@@ -706,12 +717,18 @@ textInput.addEventListener("keydown", (e) => {
     send({ type: "key", name: "return", mods: [] });
     textInput.value = "";
     lastChars = [];
+    closeSheets();  // finito di scrivere: si torna al telecomando
   } else if (e.key === "Backspace" && textInput.value.length === 0) {
     send({ type: "key", name: "backspace", mods: [] });
   }
 });
 
-bindReactive($("#btn-kb-return"), () => send({ type: "key", name: "return", mods: [] }));
+bindClick($("#btn-kb-return"), () => {
+  send({ type: "key", name: "return", mods: [] });
+  textInput.value = "";
+  lastChars = [];
+  closeSheets();
+});
 bindReactive($("#btn-kb-backspace"), () => send({ type: "key", name: "backspace", mods: [] }));
 bindReactive($("#btn-kb-tab"), () => send({ type: "key", name: "tab", mods: [] }));
 bindReactive($("#btn-kb-escape"), () => send({ type: "key", name: "escape", mods: [] }));
@@ -748,6 +765,24 @@ sensitivityInput.value = String(settings.sensitivity);
 sensitivityInput.addEventListener("input", () => {
   settings.sensitivity = Number(sensitivityInput.value);
   saveSettings();
+});
+
+const stabilizationInput = $("#setting-stabilization");
+stabilizationInput.value = String(Math.round(settings.stabilization * 100));
+stabilizationInput.addEventListener("input", () => {
+  settings.stabilization = Number(stabilizationInput.value) / 100;
+  saveSettings();
+});
+
+$$(".cursor-size-btn").forEach((btn) => {
+  btn.classList.toggle("active", Number(btn.dataset.scale) === settings.cursorScale);
+  btn.addEventListener("click", () => {
+    haptic();
+    settings.cursorScale = Number(btn.dataset.scale);
+    $$(".cursor-size-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    saveSettings();
+    syncCursorSize();
+  });
 });
 
 bindMiniSwitch($("#setting-invert-x"), "invertX");

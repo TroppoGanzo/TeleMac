@@ -351,3 +351,52 @@ test("computeDelta: la mappa xyz legge l'asse x da alpha", () => {
   const xyz = computeDelta({ alpha: 30, beta: 0, gamma: 0 }, grav, 0.02, SETTINGS, { map: "xyz", sign: 1 });
   assert.ok(Math.abs(spec.dy - xyz.dy) < 1e-12 && spec.dy < 0);
 });
+
+/* ---------- Stabilizzazione (anti-tremolio) ---------- */
+
+// Fa girare il puntatore per `seconds` secondi a 60 Hz con una rotazione
+// (nel frame del telefono, convenzione spec) data da fn(t) e somma lo spostamento.
+function runPointer(stabilization, fn, seconds) {
+  const clock = { t: 0 };
+  const settings = { sensitivity: 20, invertX: false, invertY: false, stabilization };
+  const pointer = createPointer({ getSettings: () => settings, now: () => clock.t, autoDetect: false });
+  pointer.setEnabled(true);
+  const grav = worldToPhone(40, { x: 0, y: 0, z: -9.81 });
+  let pathLen = 0, sumX = 0, sumY = 0;
+  for (let i = 0; i < Math.round(seconds * 60); i++) {
+    clock.t += 1000 / 60;
+    const w = fn(clock.t / 1000);
+    pointer.handleMotion({ rotationRate: { alpha: w.z, beta: w.x, gamma: w.y }, accelerationIncludingGravity: grav });
+    const d = pointer.takeDelta();
+    pathLen += Math.hypot(d.dx, d.dy);
+    sumX += d.dx;
+    sumY += d.dy;
+  }
+  return { pathLen, sumX, sumY };
+}
+
+// Tremolio tipico della mano: 6 Hz, fino a ~5°/s su entrambi gli assi.
+const tremor = (t) => ({ x: 5 * Math.sin(2 * Math.PI * 6 * t), y: 0, z: 4 * Math.cos(2 * Math.PI * 7 * t) });
+
+test("stabilizzazione: il tremolio della mano quasi non muove il cursore", () => {
+  const raw = runPointer(0, tremor, 3);
+  const stable = runPointer(0.5, tremor, 3);
+  assert.ok(raw.pathLen > 5, `senza stabilizzazione il tremolio dovrebbe vedersi (${raw.pathLen})`);
+  assert.ok(stable.pathLen < raw.pathLen * 0.15, `tremolio: ${stable.pathLen.toFixed(1)} vs ${raw.pathLen.toFixed(1)} punti`);
+});
+
+test("stabilizzazione: un movimento vero passa quasi intatto", () => {
+  const turn = () => ({ x: 0, y: 0, z: 40 });  // gira a sinistra a 40°/s, dritto nel frame spec
+  const raw = runPointer(0, turn, 1);
+  const stable = runPointer(0.5, turn, 1);
+  assert.ok(stable.sumX < 0 && raw.sumX < 0);
+  assert.ok(Math.abs(stable.sumX) > Math.abs(raw.sumX) * 0.8, `${stable.sumX.toFixed(0)} vs ${raw.sumX.toFixed(0)}`);
+});
+
+test("stabilizzazione a 0 = comportamento di prima", () => {
+  const wave = (t) => ({ x: 30 * Math.sin(2 * Math.PI * t), y: 0, z: 20 });
+  const a = runPointer(0, wave, 1);
+  const b = runPointer(undefined, wave, 1);
+  assert.equal(a.sumX, b.sumX);
+  assert.equal(a.sumY, b.sumY);
+});

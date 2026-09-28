@@ -37,6 +37,7 @@ textarea {
 html,
 body {
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
 }
@@ -91,6 +92,9 @@ body.island-fixed .island-wrap {
   height: 0;
   overflow: visible;
 }
+/* App aperta dalla schermata Home: l'isola "galleggia", quindi il contenuto
+   deve lasciare da solo lo spazio della barra di stato / Dynamic Island. */
+body.island-fixed #app { padding-top: var(--safe-t); }
 
 .island {
   display: flex;
@@ -169,7 +173,7 @@ body.island-fixed .island {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  padding: 6px 18px calc(18px + var(--safe-b));
+  padding: 6px 18px calc(10px + var(--safe-b));
   overflow: hidden;
 }
 .panel.active { display: flex; }
@@ -241,10 +245,10 @@ body.island-fixed .island {
   flex: none;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 18px 10px;
+  gap: 16px 14px;
   width: 100%;
-  max-width: 300px;
-  margin: 4px auto 0;
+  max-width: 330px;
+  margin: 0 auto 22px;
 }
 .round-btn {
   display: flex;
@@ -253,8 +257,8 @@ body.island-fixed .island {
   gap: 7px;
 }
 .round-btn-face {
-  width: 68px;
-  height: 68px;
+  width: 82px;
+  height: 82px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -263,8 +267,8 @@ body.island-fixed .island {
   color: var(--text);
   transition: background-color 80ms ease, transform 80ms ease;
 }
-.round-btn-face svg.icon { width: 26px; height: 26px; }
-.round-btn-label { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.round-btn-face svg.icon { width: 30px; height: 30px; }
+.round-btn-label { font-size: 13px; color: var(--text-2); font-weight: 500; }
 .round-btn.accent-active .round-btn-face,
 .round-btn:active .round-btn-face { background: var(--surface-2); transform: scale(0.94); }
 .round-btn.accent-active .round-btn-face { color: var(--accent); }
@@ -304,7 +308,7 @@ body.island-fixed .island {
 /* ---------- Clickpad ---------- */
 
 .pad-row {
-  --pad-size: min(84vw, 46vh, 330px);
+  --pad-size: min(82vw, 42vh, 320px);
   flex: none;
   display: flex;
   align-items: center;
@@ -632,9 +636,6 @@ body.island-fixed .island {
 
 /* La scheda Telecomando, in modalità demo, deve fare spazio allo schermo finto:
    qui restringiamo un po' pad e righe così tutto resta visibile senza scorrere. */
-body.demo-mode .top-buttons { margin-top: 6px; gap: 10px; }
-body.demo-mode .round-btn-face { width: 56px; height: 56px; }
-body.demo-mode .pad-row { --pad-size: min(74vw, 36vh, 280px); }
 #demo-canvas { width: 100%; height: 100%; display: block; }
 .demo-caption {
   margin: 6px 2px 0;

@@ -10,7 +10,7 @@ import ctypes
 import subprocess
 import time
 from ctypes import (
-    POINTER, Structure, c_bool, c_char_p, c_double, c_int32, c_int64, c_long,
+    POINTER, Structure, c_bool, c_char_p, c_double, c_float, c_int32, c_int64, c_long,
     c_short, c_uint16, c_uint32, c_uint64, c_ulong, c_void_p,
 )
 
@@ -122,6 +122,30 @@ def _post(event):
         CFRelease(event)
 
 
+def _cursor_scale_api():
+    """Funzioni (non documentate) che regolano la dimensione del cursore: le
+    stesse usate da Impostazioni → Accessibilità → Dimensioni del puntatore.
+    Stanno in CoreGraphics (macOS più vecchi) o in SkyLight (più recenti).
+    Restituisce (connessione, leggi, imposta) oppure None se non ci sono."""
+    candidates = [
+        (_CG, "CGSMainConnectionID", "CGSGetCursorScale", "CGSSetCursorScale"),
+    ]
+    try:
+        sky = _load("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight")
+        candidates.append((sky, "SLSMainConnectionID", "SLSGetCursorScale", "SLSSetCursorScale"))
+    except OSError:
+        pass
+    for lib, main_name, get_name, set_name in candidates:
+        try:
+            main = _fn(lib, main_name, c_int32)
+            get = _fn(lib, get_name, c_int32, c_int32, POINTER(c_float))
+            set_ = _fn(lib, set_name, c_int32, c_int32, c_float)
+            return main, get, set_
+        except AttributeError:
+            continue
+    return None
+
+
 def is_trusted(prompt=False):
     """True se il processo può inviare eventi. Con prompt=True macOS mostra la richiesta di permesso."""
     if not prompt:
@@ -148,6 +172,8 @@ class MacBackend:
         self._displays_time = 0.0
         self._scroll_rest = [0.0, 0.0]
         self._display_asleep = False
+        self._cursor_api = None
+        self._cursor_original = None  # dimensione del cursore prima che la cambiassimo
 
     # --- posizione del puntatore ---
 
@@ -319,6 +345,32 @@ class MacBackend:
                         CGEventPost(kCGHIDEventTap, cg_event)
             finally:
                 objc_autoreleasePoolPop(pool)
+
+    # --- cursore grande ---
+
+    def cursor_scale(self, scale):
+        """Ingrandisce il cursore del Mac (1 = normale). True se ci è riuscito."""
+        try:
+            if self._cursor_api is None:
+                self._cursor_api = _cursor_scale_api() or False
+            if not self._cursor_api:
+                return False
+            main, get, set_ = self._cursor_api
+            cid = main()
+            if self._cursor_original is None:
+                current = c_float(1.0)
+                if get(cid, ctypes.byref(current)) == 0:
+                    self._cursor_original = current.value
+            target = scale if scale > 1 else (self._cursor_original or 1.0)
+            return set_(cid, c_float(target)) == 0
+        except Exception:
+            return False
+
+    def cursor_restore(self):
+        if self._cursor_original is None:
+            return
+        self.cursor_scale(1)
+        self._cursor_original = None
 
     # --- sistema ---
 

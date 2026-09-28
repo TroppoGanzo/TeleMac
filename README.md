@@ -97,11 +97,17 @@ Terminale da tenere aperta.
   - **manopola del volume**: tieni il dito fermo sull'anello per un attimo. Il cerchio
     si trasforma e compare un puntino che segue il dito. Gira come la manopola di
     una radio: in senso orario alzi, in senso antiorario abbassi.
-- **In alto quattro tasti**: Clic destro, Play/Pausa, Tastiera, Altro.
+- **Sopra il cerchio quattro tasti**: Altro, Play/Pausa, Tastiera, Clic destro.
+- **Stabilizzazione**: un filtro toglie il tremolio della mano senza rallentare i
+  movimenti veri. Si regola in *Altro → Stabilizzazione*.
+- **Cursore grande sul Mac**: mentre usi il puntatore il cursore del Mac diventa
+  più grande, così lo vedi dal divano. Quando spegni il puntatore o chiudi l'app
+  torna com'era. Si regola in *Altro → Cursore* (Normale / Grande / Enorme).
 
 **Tastiera**
 
-Quello che scrivi arriva al Mac dove si trova il cursore. Da qui hai anche Invio,
+Quello che scrivi arriva al Mac dove si trova il cursore. Dopo Invio torni da solo al
+telecomando. Da qui hai anche Invio,
 Cancella, Tab, Esc, Spotlight, Barra degli indirizzi e Cerca.
 
 **Altro**

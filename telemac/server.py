@@ -40,6 +40,11 @@ DEFAULT_SETUP_PORT = 8766
 MOVE_LIMIT = 500.0
 SCROLL_LIMIT = 2000.0
 TEXT_LIMIT = 2000
+CURSOR_SCALE_MAX = 4.0
+
+# Segnaposto nell'insieme `pressed` di una connessione: questa connessione ha
+# ingrandito il cursore, quindi quando si chiude va rimesso com'era.
+CURSOR_MARK = "cursor-scaled"
 PAIR_FINISH_BODY_LIMIT = 4096
 
 WS_IDLE_TIMEOUT = 30  # secondi senza dati: il client manda un ping ogni 10s
@@ -142,6 +147,15 @@ def handle_message(backend, lock, raw: str, pressed: set) -> Optional[dict]:
         elif kind == "sleep":
             with lock:
                 backend.display_sleep()
+        elif kind == "cursor":
+            scale = min(CURSOR_SCALE_MAX, max(1.0, _finite_float(msg["scale"])))
+            with lock:
+                ok = bool(backend.cursor_scale(scale)) if hasattr(backend, "cursor_scale") else False
+            if scale > 1:
+                pressed.add(CURSOR_MARK)
+            else:
+                pressed.discard(CURSOR_MARK)
+            return {"type": "cursor", "ok": ok}
         elif kind == "ping":
             return {"type": "pong"}
         return None
@@ -150,11 +164,16 @@ def handle_message(backend, lock, raw: str, pressed: set) -> Optional[dict]:
 
 
 def release_pressed(backend, lock, pressed: set) -> None:
-    """Rilascia i tasti del mouse ancora premuti quando una connessione finisce."""
+    """Quando una connessione finisce: rilascia i tasti del mouse ancora premuti
+    e, se l'aveva ingrandito, rimette il cursore com'era."""
     with lock:
         for button in list(pressed):
             try:
-                backend.button(button, False)
+                if button == CURSOR_MARK:
+                    if hasattr(backend, "cursor_restore"):
+                        backend.cursor_restore()
+                else:
+                    backend.button(button, False)
             except Exception:
                 pass
     pressed.clear()
@@ -655,6 +674,11 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         if not args.background:
             print("\nCiao!")
+        try:
+            with lock:
+                backend.cursor_restore()
+        except Exception:
+            pass
         httpd.shutdown()
         if setupd:
             setupd.shutdown()

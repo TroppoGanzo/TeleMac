@@ -39,6 +39,13 @@ class DryRunBackend:
     def display_sleep(self):
         self._log("display_sleep")
 
+    def cursor_scale(self, scale):
+        self._log("cursor_scale", scale)
+        return True
+
+    def cursor_restore(self):
+        self._log("cursor_restore")
+
 
 def create_backend(dry_run=False):
     if dry_run or sys.platform != "darwin":

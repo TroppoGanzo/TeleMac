@@ -71,6 +71,13 @@ class RecordingBackend(DryRunBackend):
     def display_sleep(self):
         self._record("sleep")
 
+    def cursor_scale(self, scale):
+        self._record("cursor_scale", scale)
+        return True
+
+    def cursor_restore(self):
+        self._record("cursor_restore")
+
     def snapshot(self):
         with self._call_lock:
             return list(self.calls)
@@ -707,6 +714,47 @@ class TestReleasePressed(unittest.TestCase):
         self.assertEqual(set(pressed), set())
         self.assertIn(("button", "left", False), backend.calls)
         self.assertIn(("button", "right", False), backend.calls)
+
+    def test_rimette_il_cursore_com_era(self):
+        backend = RecordingBackend()
+        lock = threading.Lock()
+        pressed = set()
+        reply = server.handle_message(backend, lock, json.dumps({"type": "cursor", "scale": 2.5}), pressed)
+        self.assertEqual(reply, {"type": "cursor", "ok": True})
+        server.release_pressed(backend, lock, pressed)
+        self.assertEqual(backend.calls, [("cursor_scale", 2.5), ("cursor_restore",)])
+        self.assertNotIn(("button", server.CURSOR_MARK, False), backend.calls)
+
+
+class TestCursorMessage(unittest.TestCase):
+    def setUp(self):
+        self.backend = RecordingBackend()
+        self.lock = threading.Lock()
+        self.pressed = set()
+
+    def send(self, obj):
+        return server.handle_message(self.backend, self.lock, json.dumps(obj), self.pressed)
+
+    def test_scala_limitata_fra_1_e_4(self):
+        self.send({"type": "cursor", "scale": 50})
+        self.send({"type": "cursor", "scale": -3})
+        self.assertEqual(self.backend.calls, [("cursor_scale", 4.0), ("cursor_scale", 1.0)])
+
+    def test_tornare_a_1_non_richiede_ripristino(self):
+        self.send({"type": "cursor", "scale": 3})
+        self.send({"type": "cursor", "scale": 1})
+        self.assertNotIn(server.CURSOR_MARK, self.pressed)
+
+    def test_valori_non_validi_ignorati(self):
+        self.assertIsNone(self.send({"type": "cursor", "scale": "tanto"}))
+        self.assertIsNone(self.send({"type": "cursor"}))
+        self.assertEqual(self.backend.calls, [])
+
+    def test_backend_senza_supporto_risponde_ok_false(self):
+        class Minimal:
+            pass
+        reply = server.handle_message(Minimal(), self.lock, json.dumps({"type": "cursor", "scale": 2}), set())
+        self.assertEqual(reply, {"type": "cursor", "ok": False})
 
 
 # --------------------------------------------------------------------------

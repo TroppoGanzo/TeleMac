@@ -60,9 +60,42 @@
     return Math.min(hi, Math.max(lo, v));
   }
 
-  function softDeadzone(r) {
+  function softDeadzone(r, dz) {
     var s = r < 0 ? -1 : r > 0 ? 1 : 0;
-    return s * Math.max(0, Math.abs(r) - DEADZONE_DEG_S);
+    return s * Math.max(0, Math.abs(r) - dz);
+  }
+
+  /* Stabilizzazione (anti-tremolio): filtro "One Euro" (Casiez et al., 2012).
+   * È un passa-basso che si adatta alla velocità: con la mano quasi ferma
+   * filtra molto (via il tremolio), nei movimenti decisi quasi niente (niente
+   * ritardo). `stabilization` va da 0 (spento) a 1 (massimo). */
+  var STAB_BETA = 0.004;       // quanto la velocità "apre" il filtro
+  var STAB_D_CUTOFF = 1.0;     // Hz, filtro sulla derivata
+  function stabMinCutoff(st) { return 3.0 - 2.4 * st; }   // Hz: da 3 (poco) a 0.6 (tanto)
+  function stabDeadzone(st) { return DEADZONE_DEG_S + 2.5 * st; }
+
+  function createOneEuro() {
+    var xPrev = null;
+    var dxPrev = 0;
+    function alpha(cutoff, dt) {
+      var tau = 1 / (2 * Math.PI * cutoff);
+      return 1 / (1 + tau / dt);
+    }
+    return {
+      filter: function (x, dt, minCutoff) {
+        if (xPrev === null || !(dt > 0)) {
+          xPrev = x;
+          dxPrev = 0;
+          return x;
+        }
+        var dx = (x - xPrev) / dt;
+        dxPrev += alpha(STAB_D_CUTOFF, dt) * (dx - dxPrev);
+        var cutoff = minCutoff + STAB_BETA * Math.abs(dxPrev);
+        xPrev += alpha(cutoff, dt) * (x - xPrev);
+        return xPrev;
+      },
+      reset: function () { xPrev = null; dxPrev = 0; },
+    };
   }
 
   function resolveUp(gravityUnit) {
@@ -101,8 +134,9 @@
     var yaw = wx * u.x + wy * u.y + wz * u.z; // ω·u: rotazione attorno alla verticale del mondo
     var pitch = wx; // ω.x
 
-    var yawP = softDeadzone(yaw);
-    var pitchP = softDeadzone(pitch);
+    var dz = stabDeadzone(settings.stabilization || 0);
+    var yawP = softDeadzone(yaw, dz);
+    var pitchP = softDeadzone(pitch, dz);
     var speed = Math.hypot(yawP, pitchP);
     var gain = settings.sensitivity * clamp(GAIN_MIN + speed / GAIN_SPEED_DIV, GAIN_MIN, GAIN_MAX);
 
@@ -134,6 +168,7 @@
     var axes = normalizeAxes(opts.axes);
     var onAxes = opts.onAxes || null;
     var detect = opts.autoDetect === false ? null : newDetection();
+    var stab = { alpha: createOneEuro(), beta: createOneEuro(), gamma: createOneEuro() };
 
     function newDetection() {
       return { fast: null, prevTheta: null, sAlpha: 0, sBeta: 0, nAlpha: 0, nBeta: 0, nTheta: 0, evidence: 0, samples: 0 };
@@ -204,6 +239,9 @@
 
     function setEnabled(value) {
       enabled = !!value;
+      stab.alpha.reset();
+      stab.beta.reset();
+      stab.gamma.reset();
       lastTime = null; // il campione dopo un cambio di stato riparte con dt=0
     }
 
@@ -237,6 +275,19 @@
       }
 
       if (!enabled) return;
+
+      var settings = getSettings();
+      var rot = { alpha: rr.alpha, beta: rr.beta, gamma: rr.gamma };
+      var st = settings.stabilization || 0;
+      if (st > 0) {
+        var mc = stabMinCutoff(st);
+        rot = {
+          alpha: stab.alpha.filter(rr.alpha, dt, mc),
+          beta: stab.beta.filter(rr.beta, dt, mc),
+          gamma: stab.gamma.filter(rr.gamma, dt, mc),
+        };
+      }
+
       if (t < freezeUntil) return; // congelato: non accumula
 
       var gravityUnit = null;
@@ -247,8 +298,7 @@
         }
       }
 
-      var rot = { alpha: rr.alpha, beta: rr.beta, gamma: rr.gamma };
-      var d = computeDelta(rot, gravityUnit, dt, getSettings(), axes);
+      var d = computeDelta(rot, gravityUnit, dt, settings, axes);
       accX += d.dx;
       accY += d.dy;
     }
