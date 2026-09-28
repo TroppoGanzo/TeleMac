@@ -301,7 +301,9 @@ def make_app_handler(
                 data = candidate.read_bytes()
             except OSError:
                 return self._send_404()
-            self._send_bytes(data, ctype)
+            # no-cache: Safari ricontrolla sempre, così dopo un aggiornamento
+            # l'iPhone vede subito la versione nuova dell'app.
+            self._send_bytes(data, ctype, extra_headers=[("Cache-Control", "no-cache")])
 
         # ---- WebSocket ----
 
