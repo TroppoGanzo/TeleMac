@@ -35,11 +35,14 @@ iPhone (app nella schermata Home)  ──Wi-Fi di casa, HTTPS──▶  TeleMac.
 
 1. Scarica **TeleMac.dmg** dall'ultima release:
    https://github.com/TroppoGanzo/TeleMac/releases/latest
-2. Aprilo e trascina **TeleMac** nella cartella **Applicazioni**.
-3. Apri TeleMac. La prima volta macOS potrebbe dire che non può verificare lo
-   sviluppatore: chiudi l'avviso, poi vai su *Impostazioni di Sistema → Privacy e
-   sicurezza* e in fondo tocca **Apri comunque**. Si fa una volta sola (il perché è
-   spiegato in [Firma](#firma)).
+2. Aprilo e fai doppio clic su **TeleMac**. La prima volta macOS potrebbe dire che
+   non può verificare lo sviluppatore: chiudi l'avviso, poi vai su *Impostazioni di
+   Sistema → Privacy e sicurezza* e in fondo tocca **Apri comunque**. Si fa una
+   volta sola (il perché è spiegato in [Firma](#firma)).
+3. Fatto: come un'app per iPhone, TeleMac **si installa da sola** in Applicazioni,
+   espelle il disco "TeleMac" dalla scrivania e mette il file `.dmg` scaricato nel
+   Cestino. Se preferisci trascinarla tu in Applicazioni va bene lo stesso: al primo
+   avvio fa la stessa pulizia.
 4. macOS chiede il permesso di **Accessibilità** per TeleMac: nella finestra di
    TeleMac tocca *Apri Impostazioni* e attiva **TeleMac**. Senza questo permesso il
    Mac ignora i comandi.
@@ -105,9 +108,13 @@ Fatto. Da ora in poi basta aprire l'icona: l'iPhone resta abbinato anche quando 
 - **Sopra il cerchio quattro tasti**: Altro, Play/Pausa, Tastiera, Clic destro.
 - **Stabilizzazione**: un filtro toglie il tremolio della mano senza rallentare i
   movimenti veri. Si regola in *Altro → Stabilizzazione*.
+- **Movimento fluido**: sul Wi-Fi i movimenti arrivano a raffiche irregolari; il Mac
+  li ridistribuisce a ritmo costante (circa 120 volte al secondo), così il cursore
+  scorre senza scatti e arriva comunque esattamente dove miri.
 - **Cursore grande sul Mac**: mentre usi il puntatore il cursore del Mac diventa
-  più grande, così lo vedi dal divano. Quando spegni il puntatore o chiudi l'app
-  torna com'era. Si regola in *Altro → Cursore* (Normale / Grande / Enorme).
+  più grande, così lo vedi dal divano, e resta grande ogni volta che il telecomando
+  lo muove (anche se nel frattempo macOS l'aveva rimesso normale o l'iPhone si era
+  ricollegato). Quando spegni il puntatore o chiudi l'app torna com'era. Si regola in *Altro → Cursore* (Normale / Grande / Enorme).
 
 **Tastiera**
 

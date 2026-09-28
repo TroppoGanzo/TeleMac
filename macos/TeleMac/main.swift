@@ -250,6 +250,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         buildWindow()
+
+        // Aperta dal DMG o dai Download: si installa in Applicazioni e si
+        // riapre da lì. Questa copia ha finito il suo lavoro.
+        if Installer.installIfNeeded(log: { [weak self] text in self?.server.writeLog(text) }) {
+            showMessage(title: "Installo TeleMac…", body: "La sposto in Applicazioni, come un'app normale.")
+            showWindow()
+            return
+        }
+        Installer.cleanUpAfterLaunch(log: { [weak self] text in
+            DispatchQueue.main.async { self?.server.writeLog(text) }
+        })
         removeLegacyLaunchAgent()
         showMessage(title: "Avvio di TeleMac…", body: "Un attimo, sto accendendo il telecomando.")
         if !launchedAtLogin {

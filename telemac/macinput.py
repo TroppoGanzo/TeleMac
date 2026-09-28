@@ -208,6 +208,8 @@ class MacBackend:
         self._display_asleep = False
         self._cursor_api = None
         self._cursor_original = None  # dimensione del cursore prima che la cambiassimo
+        self._cursor_target = None    # dimensione voluta dal telecomando (None = non toccare)
+        self._cursor_checked = 0.0
 
     # --- posizione del puntatore ---
 
@@ -266,6 +268,7 @@ class MacBackend:
 
     def move(self, dx, dy):
         self._wake()
+        self._keep_cursor_big()
         prev = self._location()
         x, y = self._clamp(prev[0] + dx, prev[1] + dy, prev)
         self._pos = (x, y)
@@ -396,11 +399,33 @@ class MacBackend:
                 if get(cid, ctypes.byref(current)) == 0:
                     self._cursor_original = current.value
             target = scale if scale > 1 else (self._cursor_original or 1.0)
+            self._cursor_target = scale if scale > 1 else None
+            self._cursor_checked = time.monotonic()
             return set_(cid, c_float(target)) == 0
         except Exception:
             return False
 
+    def _keep_cursor_big(self):
+        """Mentre il telecomando muove il cursore, deve restare grande: se macOS
+        (o un'altra app) l'ha rimesso piccolo, lo ringrandiamo. Controllo
+        leggero, al massimo due volte al secondo."""
+        if not self._cursor_target or not self._cursor_api:
+            return
+        now = time.monotonic()
+        if now - self._cursor_checked < 0.5:
+            return
+        self._cursor_checked = now
+        try:
+            main, get, set_ = self._cursor_api
+            cid = main()
+            current = c_float(0.0)
+            if get(cid, ctypes.byref(current)) != 0 or abs(current.value - self._cursor_target) > 0.05:
+                set_(cid, c_float(self._cursor_target))
+        except Exception:
+            pass
+
     def cursor_restore(self):
+        self._cursor_target = None
         if self._cursor_original is None:
             return
         self.cursor_scale(1)

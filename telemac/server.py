@@ -132,7 +132,95 @@ def _finite_float(value) -> float:
     return f
 
 
-def handle_message(backend, lock, raw: str, pressed: set) -> Optional[dict]:
+class SmoothMover:
+    """Rende fluido il movimento del cursore.
+
+    Sul Wi-Fi i messaggi dell'iPhone arrivano a raffiche irregolari (il
+    telefono risparmia batteria accorpando i pacchetti): applicandoli così come
+    arrivano il cursore andrebbe a scatti. Qui li accumuliamo e li rilasciamo a
+    ritmo costante (~120 volte al secondo) con una curva morbida: ogni passo
+    consuma una parte di quello che resta, quindi il cursore arriva sempre
+    esattamente dove deve, solo senza strappi.
+    """
+
+    RATE = 120.0      # passi al secondo
+    TAU = 0.03        # costante di tempo della curva (secondi): più alta = più morbido
+    SNAP = 0.35       # sotto questo residuo (in punti) lo diamo tutto in una volta
+
+    def __init__(self, backend, lock, *, clock: Callable[[], float] = time.monotonic, start: bool = True):
+        self._backend = backend
+        self._lock = lock
+        self._clock = clock
+        self._cv = threading.Condition()
+        self._pending = [0.0, 0.0]
+        self._last = None
+        if start:
+            threading.Thread(target=self._run, daemon=True).start()
+
+    def add(self, dx: float, dy: float) -> None:
+        with self._cv:
+            self._pending[0] += dx
+            self._pending[1] += dy
+            self._cv.notify()
+
+    def _take(self, fraction: float):
+        px, py = self._pending
+        if abs(px) <= self.SNAP and abs(py) <= self.SNAP:
+            fraction = 1.0
+        sx, sy = px * fraction, py * fraction
+        self._pending = [px - sx, py - sy]
+        return sx, sy
+
+    def step(self, dt: float) -> None:
+        """Un passo: sposta il cursore della parte di residuo che spetta a `dt`."""
+        with self._cv:
+            sx, sy = self._take(1.0 - math.exp(-max(dt, 0.0) / self.TAU))
+        if sx or sy:
+            with self._lock:
+                self._backend.move(sx, sy)
+
+    def flush(self) -> None:
+        """Applica subito tutto il residuo (prima di un clic: deve arrivare dove miravi)."""
+        with self._cv:
+            sx, sy = self._take(1.0)
+        if sx or sy:
+            with self._lock:
+                self._backend.move(sx, sy)
+
+    def _run(self) -> None:
+        period = 1.0 / self.RATE
+        while True:
+            with self._cv:
+                while self._pending == [0.0, 0.0]:
+                    self._last = None
+                    self._cv.wait()
+            now = self._clock()
+            dt = period if self._last is None else now - self._last
+            self._last = now
+            try:
+                self.step(dt)
+            except Exception:
+                pass
+            time.sleep(period)
+
+
+def _cursor_holders(backend) -> dict:
+    """Connessioni che vogliono il cursore grande (connessione -> scala).
+
+    Il cursore torna normale solo quando nessuna lo vuole più: se l'iPhone si
+    ricollega, la connessione vecchia che si chiude in ritardo non deve
+    rimpicciolire il cursore appena ingrandito da quella nuova."""
+    holders = getattr(backend, "_telemac_cursor_holders", None)
+    if holders is None:
+        holders = {}
+        try:
+            setattr(backend, "_telemac_cursor_holders", holders)
+        except Exception:
+            pass
+    return holders
+
+
+def handle_message(backend, lock, raw: str, pressed: set, mover: Optional[SmoothMover] = None) -> Optional[dict]:
     """Applica un messaggio testuale ricevuto dal client al backend.
 
     Non solleva mai eccezioni verso l'esterno: un messaggio malformato viene
@@ -148,8 +236,11 @@ def handle_message(backend, lock, raw: str, pressed: set) -> Optional[dict]:
         if kind == "move":
             dx = _clamp(_finite_float(msg["dx"]), MOVE_LIMIT)
             dy = _clamp(_finite_float(msg["dy"]), MOVE_LIMIT)
-            with lock:
-                backend.move(dx, dy)
+            if mover is not None:
+                mover.add(dx, dy)
+            else:
+                with lock:
+                    backend.move(dx, dy)
         elif kind == "scroll":
             dx = _clamp(_finite_float(msg["dx"]), SCROLL_LIMIT)
             dy = _clamp(_finite_float(msg["dy"]), SCROLL_LIMIT)
@@ -158,12 +249,16 @@ def handle_message(backend, lock, raw: str, pressed: set) -> Optional[dict]:
         elif kind == "click":
             button = msg["button"]
             if button in MOUSE_BUTTONS:
+                if mover is not None:
+                    mover.flush()
                 with lock:
                     backend.click(button)
         elif kind == "button":
             button = msg["button"]
             down = bool(msg["down"])
             if button in MOUSE_BUTTONS:
+                if mover is not None:
+                    mover.flush()
                 with lock:
                     backend.button(button, down)
                 if down:
@@ -193,7 +288,14 @@ def handle_message(backend, lock, raw: str, pressed: set) -> Optional[dict]:
         elif kind == "cursor":
             scale = min(CURSOR_SCALE_MAX, max(1.0, _finite_float(msg["scale"])))
             with lock:
-                ok = bool(backend.cursor_scale(scale)) if hasattr(backend, "cursor_scale") else False
+                holders = _cursor_holders(backend)
+                if scale > 1:
+                    holders[id(pressed)] = scale
+                else:
+                    holders.pop(id(pressed), None)
+                # Vince la richiesta più grande fra le connessioni ancora aperte.
+                target = max(holders.values(), default=1.0)
+                ok = bool(backend.cursor_scale(target)) if hasattr(backend, "cursor_scale") else False
             if scale > 1:
                 pressed.add(CURSOR_MARK)
             else:
@@ -213,7 +315,12 @@ def release_pressed(backend, lock, pressed: set) -> None:
         for button in list(pressed):
             try:
                 if button == CURSOR_MARK:
-                    if hasattr(backend, "cursor_restore"):
+                    holders = _cursor_holders(backend)
+                    holders.pop(id(pressed), None)
+                    if holders:
+                        if hasattr(backend, "cursor_scale"):
+                            backend.cursor_scale(max(holders.values()))
+                    elif hasattr(backend, "cursor_restore"):
                         backend.cursor_restore()
                 else:
                     backend.button(button, False)
@@ -228,7 +335,7 @@ def release_pressed(backend, lock, pressed: set) -> None:
 
 def make_app_handler(
     *, backend, lock, pairing: PairingManager, device_store: DeviceStore,
-    shared: SharedState, computer_name: str, web_dir: Path,
+    shared: SharedState, computer_name: str, web_dir: Path, mover: Optional[SmoothMover] = None,
 ):
     class Handler(BaseHTTPRequestHandler):
         server_version = "TeleMac/2.0"
@@ -409,7 +516,7 @@ def make_app_handler(
                     opcode, payload = miniws.read_message(self.rfile, self.wfile)
                     if opcode != miniws.OPCODE_TEXT:
                         continue
-                    reply = handle_message(backend, lock, payload.decode("utf-8", "replace"), pressed)
+                    reply = handle_message(backend, lock, payload.decode("utf-8", "replace"), pressed, mover)
                     if reply is not None:
                         miniws.send_json(self.wfile, reply)
             except (miniws.ConnectionClosed, OSError):
@@ -710,6 +817,7 @@ def main(argv=None) -> int:
     app_handler = make_app_handler(
         backend=backend, lock=lock, pairing=pairing, device_store=device_store,
         shared=shared, computer_name=computer_name, web_dir=web,
+        mover=SmoothMover(backend, lock),
     )
     ssl_context = make_ssl_context(cert_paths)
 
