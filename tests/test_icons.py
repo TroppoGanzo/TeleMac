@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
-from make_icons import ICON_SIZES, make_icon_png  # noqa: E402
+from make_icons import ICNS_TYPES, ICON_SIZES, make_icns, make_icon_png, make_mac_icon_png  # noqa: E402
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
@@ -139,6 +139,44 @@ class TestFileGenerati(unittest.TestCase):
             ihdr = _ihdr(data)
             self.assertEqual((ihdr["width"], ihdr["height"]), (size, size))
             self.assertEqual(ihdr["color_type"], 2)
+
+
+class TestIconaMac(unittest.TestCase):
+    def _rgba(self, data):
+        chunks = _read_chunks(data)
+        raw = zlib.decompress(b"".join(p for t, p in chunks if t == b"IDAT"))
+        w = _ihdr(data)["width"]
+        stride = 1 + w * 4
+        return [raw[y * stride + 1 : (y + 1) * stride] for y in range(w)]
+
+    def test_rgba_con_angoli_trasparenti(self):
+        size = 64
+        data = make_mac_icon_png(size)
+        ihdr = _ihdr(data)
+        self.assertEqual((ihdr["width"], ihdr["color_type"]), (size, 6))
+        rows = self._rgba(data)
+        alpha = lambda x, y: rows[y][x * 4 + 3]
+        self.assertEqual(alpha(0, 0), 0)            # angolo: fuori dalla mattonella
+        self.assertEqual(alpha(size // 2, size // 2), 255)  # centro: pieno
+        r, g, b, a = rows[size // 10 + 2][(size // 2) * 4 : (size // 2) * 4 + 4]
+        self.assertGreater(b, r)  # bordo della mattonella: blu ciano
+
+    def test_icns_contiene_tutte_le_taglie(self):
+        pngs = {side: make_icon_png(8) for _, side in ICNS_TYPES}
+        data = make_icns(pngs)
+        self.assertEqual(data[:4], b"icns")
+        self.assertEqual(struct.unpack(">I", data[4:8])[0], len(data))
+        kinds = []
+        i = 8
+        while i < len(data):
+            kinds.append(data[i : i + 4])
+            i += struct.unpack(">I", data[i + 4 : i + 8])[0]
+        self.assertEqual(kinds, [k for k, _ in ICNS_TYPES])
+
+    def test_file_icns_nel_repository(self):
+        path = Path(__file__).resolve().parent.parent / "macos" / "AppIcon.icns"
+        self.assertTrue(path.is_file(), "manca macos/AppIcon.icns: esegui tools/make_icons.py")
+        self.assertEqual(path.read_bytes()[:4], b"icns")
 
 
 if __name__ == "__main__":

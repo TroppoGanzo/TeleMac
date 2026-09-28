@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""TeleMac — server sul Mac. Avvialo con TeleMac.command, inquadra il QR con l'iPhone e via.
+"""TeleMac — server sul Mac.
+
+Di solito lo avvia l'app TeleMac.app (con --app): la finestra dell'app mostra
+il QR e il codice di abbinamento. Per sviluppo si può lanciare anche a mano,
+`python3 telemac/server.py`, e allora QR e messaggi escono nel terminale.
 
 Non richiede pip install: usa solo la libreria standard di Python 3.
 """
@@ -12,6 +16,8 @@ import json
 import math
 import mimetypes
 import os
+import secrets
+import signal
 import ssl
 import subprocess
 import sys
@@ -27,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import certs
 import miniws
 import netinfo
+import panel
 import qr
 from backends import accessibility_status, create_backend
 from keys import KEYCODES, MEDIA_KEYS, MODIFIERS, MOUSE_BUTTONS
@@ -54,8 +61,12 @@ ACCESSIBILITY_INSTRUCTIONS = (
     "\n"
     "  TeleMac ha bisogno del permesso di Accessibilità per muovere mouse e tastiera.\n"
     "  Vai su: Impostazioni di Sistema → Privacy e sicurezza → Accessibilità\n"
-    "  e attiva l'interruttore per Terminale (o per Python).\n"
+    "  e attiva l'interruttore per l'app che ha avviato il server (Terminale o TeleMac).\n"
 )
+
+# Righe per l'app per Mac: su stdout, una per evento, "@telemac {json}".
+EVENT_PREFIX = "@telemac "
+EXIT_PORT_IN_USE = 3
 
 
 def state_dir() -> Path:
@@ -68,10 +79,42 @@ def web_directory() -> Path:
 
 class SharedState:
     """Piccolo stato condiviso fra le richieste (una sola scrittura alla volta,
-    dal thread principale o dal watcher dell'Accessibilità)."""
+    dal thread principale o dal watcher dell'Accessibilità).
 
-    def __init__(self):
+    `emit`, se c'è, riceve gli eventi da passare all'app per Mac (codice di
+    abbinamento comparso, iPhone abbinato...)."""
+
+    def __init__(self, emit: Optional[Callable[[dict], None]] = None, clock: Callable[[], float] = time.monotonic):
         self.accessibility: Optional[bool] = None
+        self.pairing_code: Optional[str] = None
+        self.pairing_expires = 0.0
+        self.last_paired = None  # (nome del dispositivo, istante)
+        self.emit = emit
+        self._clock = clock
+
+    def notify(self, event: dict) -> None:
+        if self.emit is None:
+            return
+        try:
+            self.emit(event)
+        except Exception:
+            pass
+
+    def show_code(self, code: str, seconds_left: float) -> None:
+        self.pairing_code = code
+        self.pairing_expires = self._clock() + seconds_left
+        self.notify({"event": "pair_code"})
+
+    def hide_code(self) -> None:
+        if self.pairing_code is None:
+            return
+        self.pairing_code = None
+        self.pairing_expires = 0.0
+        self.notify({"event": "pair_done"})
+
+    def paired(self, device_name: str) -> None:
+        self.last_paired = (device_name, self._clock())
+        self.notify({"event": "paired", "device": device_name})
 
 
 # --------------------------------------------------------------------------
@@ -229,7 +272,7 @@ def make_app_handler(
                 return self._handle_ping()
             if path == "/ws":
                 return self._handle_ws(parse_qs(parts.query))
-            if path == "/setup.html":
+            if path in ("/setup.html", "/panel.html"):
                 return self._send_404()
             self._serve_static(path)
 
@@ -298,6 +341,7 @@ def make_app_handler(
             ok, error, attempts_left = pairing.finish(code)
             if ok:
                 token = device_store.add(device_name)
+                shared.paired(device_name)
                 return self._send_json({"ok": True, "token": token, "name": computer_name})
             body = {"ok": False, "error": error}
             if attempts_left is not None:
@@ -313,7 +357,7 @@ def make_app_handler(
                 candidate.relative_to(base)
             except ValueError:
                 return self._send_404()  # tentativo di path traversal
-            if candidate.name == "setup.html" or not candidate.is_file():
+            if candidate.name in ("setup.html", "panel.html") or not candidate.is_file():
                 return self._send_404()
             ctype = mimetypes.guess_type(str(candidate))[0] or "application/octet-stream"
             try:
@@ -529,18 +573,22 @@ def print_banner(*, hostname: str, ip: Optional[str], app_port: int, setup_port:
 def _start_accessibility_watcher(shared: SharedState):
     def poll():
         while True:
-            time.sleep(3)
+            time.sleep(2)
             if accessibility_status(prompt=False):
                 shared.accessibility = True
+                shared.notify({"event": "accessibility", "granted": True})
                 print("  ✅ Permesso Accessibilità concesso.")
                 return
     threading.Thread(target=poll, daemon=True).start()
 
 
-def _make_pairing(*, dry_run: bool) -> PairingManager:
+def _make_pairing(*, dry_run: bool, shared: SharedState, app_mode: bool = False) -> PairingManager:
     dialog = {"proc": None}
 
     def on_code(code: str, seconds_left: float):
+        shared.show_code(code, seconds_left)
+        if app_mode:
+            return  # il codice lo mostra la finestra dell'app, nel log non serve
         pretty = f"{code[:3]} {code[3:]}"
         print(f"  Codice di abbinamento: {pretty}")  # una riga per evento, anche in --background
         if dry_run or sys.platform != "darwin":
@@ -555,6 +603,7 @@ def _make_pairing(*, dry_run: bool) -> PairingManager:
             pass
 
     def on_done():
+        shared.hide_code()
         proc = dialog.get("proc")
         if proc is None:
             return
@@ -568,6 +617,31 @@ def _make_pairing(*, dry_run: bool) -> PairingManager:
     return PairingManager(on_code=on_code, on_done=on_done)
 
 
+def _make_emitter(out=None) -> Callable[[dict], None]:
+    """Scrive gli eventi per l'app per Mac su stdout, una riga JSON ciascuno."""
+    lock = threading.Lock()
+
+    def emit(event: dict) -> None:
+        line = EVENT_PREFIX + json.dumps(event, ensure_ascii=False)
+        with lock:
+            print(line, file=out or sys.stdout, flush=True)
+
+    return emit
+
+
+def _watch_parent(stop: threading.Event) -> None:
+    """In modalità app: quando l'app si chiude (anche se va in crash) il nostro
+    stdin arriva alla fine, e allora ci fermiamo anche noi."""
+    def run():
+        try:
+            while sys.stdin.readline():
+                pass
+        except Exception:
+            pass
+        stop.set()
+    threading.Thread(target=run, daemon=True).start()
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Server TeleMac per controllare il Mac dall'iPhone.")
     parser.add_argument("--port", type=int, default=DEFAULT_APP_PORT, help="porta dell'app HTTPS")
@@ -575,7 +649,11 @@ def main(argv=None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="non tocca mouse/tastiera, stampa solo i comandi")
     parser.add_argument("--background", action="store_true", help="niente QR, log ridotti al minimo")
     parser.add_argument("--forget-devices", action="store_true", help="svuota l'elenco dei dispositivi abbinati ed esce")
+    parser.add_argument("--app", action="store_true",
+                        help="avviato da TeleMac.app: eventi su stdout, pannello locale per la finestra")
+    parser.add_argument("--panel-port", type=int, default=0, help="porta locale del pannello (solo con --app)")
     args = parser.parse_args(argv)
+    quiet = args.background or args.app
 
     state = state_dir()
     state.mkdir(parents=True, exist_ok=True)
@@ -587,13 +665,16 @@ def main(argv=None) -> int:
         print(f"Rimossi {n} dispositivi abbinati.")
         return 0
 
+    emit = _make_emitter() if args.app else None
+    stop = threading.Event()
+
     web = web_directory()
 
     hostname = netinfo.local_hostname()
     computer_name = netinfo.computer_name()
     ip = netinfo.lan_ipv4()
 
-    if not args.background:
+    if not quiet:
         print(f"TeleMac su {computer_name} ({hostname})...")
 
     cert_paths = certs.ensure_certificates(state, [hostname], [ip] if ip else [])
@@ -608,20 +689,23 @@ def main(argv=None) -> int:
     backend = create_backend(dry_run=args.dry_run)
     lock = threading.Lock()
 
-    shared = SharedState()
+    shared = SharedState(emit=emit)
     if not args.dry_run and sys.platform == "darwin":
         shared.accessibility = accessibility_status(prompt=False)
         if shared.accessibility is False:
-            shared.accessibility = accessibility_status(prompt=True)
+            # Con --app la richiesta di permesso la fa l'app stessa (è lei che
+            # compare nell'elenco di Accessibilità), qui aspettiamo e basta.
+            if not args.app:
+                shared.accessibility = accessibility_status(prompt=True)
             if not shared.accessibility:
                 if args.background:
                     print("  Permesso Accessibilità mancante: Impostazioni di Sistema → Privacy e sicurezza → Accessibilità.")
-                else:
+                elif not args.app:
                     print(ACCESSIBILITY_INSTRUCTIONS)
                 _start_accessibility_watcher(shared)
 
     device_store = DeviceStore(state / "devices.json")
-    pairing = _make_pairing(dry_run=args.dry_run)
+    pairing = _make_pairing(dry_run=args.dry_run, shared=shared, app_mode=args.app)
 
     app_handler = make_app_handler(
         backend=backend, lock=lock, pairing=pairing, device_store=device_store,
@@ -633,6 +717,9 @@ def main(argv=None) -> int:
         httpd = TlsThreadingHTTPServer(("0.0.0.0", args.port), app_handler, ssl_context)
     except OSError as exc:
         if args.port != 0 and exc.errno == errno.EADDRINUSE:
+            if args.app:
+                emit({"event": "error", "code": "port_in_use", "port": args.port})
+                return EXIT_PORT_IN_USE
             print("TeleMac è già in esecuzione.")
             if args.background:
                 print(f"  Pagina di configurazione: http://{ip or hostname}:{args.setup_port}/")
@@ -659,29 +746,59 @@ def main(argv=None) -> int:
         setupd.daemon_threads = True
     setup_port = setupd.server_address[1] if setupd else args.setup_port
 
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    if setupd:
-        threading.Thread(target=setupd.serve_forever, daemon=True).start()
+    servers = [httpd] + ([setupd] if setupd else [])
 
-    if args.background:
+    if args.app:
+        token = os.environ.get("TELEMAC_PANEL_TOKEN") or secrets.token_urlsafe(32)
+        qr_cache = panel.QrCache()
+
+        def status_provider():
+            return panel.build_panel_status(
+                shared=shared, device_store=device_store, computer_name=computer_name,
+                hostname=hostname, ip=ip, app_port=app_port,
+                setup_port=setup_port if setupd else None, ca_fp=ca_fp,
+                profile_path=profile_path, qr_cache=qr_cache, dry_run=args.dry_run,
+            )
+
+        panel_handler = panel.make_panel_handler(
+            token=token, status_provider=status_provider, device_store=device_store, web_dir=web,
+        )
+        paneld = ThreadingHTTPServer(("127.0.0.1", args.panel_port), panel_handler)
+        paneld.daemon_threads = True
+        servers.append(paneld)
+        panel_url = f"http://127.0.0.1:{paneld.server_address[1]}/?token={token}"
+
+    for srv in servers:
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+    if args.app:
+        emit({"event": "ready", "panel": panel_url, "appPort": app_port, "setupPort": setup_port})
+        _watch_parent(stop)
+    elif args.background:
         print(f"TeleMac in esecuzione in background (app :{app_port}, setup :{setup_port}).")
     else:
         print_banner(hostname=hostname, ip=ip, app_port=app_port, setup_port=setup_port, ca_fp=ca_fp)
 
+    # L'app per Mac ci chiude con SIGTERM: usciamo per bene (cursore compreso).
     try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        if not args.background:
-            print("\nCiao!")
-        try:
-            with lock:
-                backend.cursor_restore()
-        except Exception:
+        signal.signal(signal.SIGTERM, lambda signum, frame: stop.set())
+    except ValueError:
+        pass  # non siamo nel thread principale (succede nei test)
+
+    try:
+        while not stop.wait(0.5):
             pass
-        httpd.shutdown()
-        if setupd:
-            setupd.shutdown()
+    except KeyboardInterrupt:
+        if not quiet:
+            print("\nCiao!")
+    try:
+        with lock:
+            backend.cursor_restore()
+    except Exception:
+        pass
+    for srv in servers:
+        srv.shutdown()
+        srv.server_close()
     return 0
 
 

@@ -1,0 +1,130 @@
+name: App per Mac
+
+# Compila TeleMac.app su un Mac di GitHub, la firma come "Edoardo Ciarlo" e
+# prepara TeleMac.dmg. Sul ramo main la pubblica anche come release, così si
+# scarica sempre da: https://github.com/TroppoGanzo/TeleMac/releases/latest
+#
+# Firma (secrets del repository, tutti facoltativi):
+#   MAC_SIGN_P12 + MAC_SIGN_PASSWORD  certificato in .p12 (base64). Crealo con
+#                                     tools/crea_certificato_firma.sh, oppure
+#                                     esporta il tuo "Developer ID Application".
+#   MAC_SIGN_IDENTITY                 nome del certificato, se non è "Edoardo Ciarlo"
+#   APPLE_ID, APPLE_TEAM_ID,
+#   APPLE_APP_PASSWORD                per la notarizzazione Apple (solo con Developer ID)
+# Senza MAC_SIGN_P12 ogni build usa un certificato "Edoardo Ciarlo" nuovo: la
+# firma c'è, ma dopo ogni aggiornamento macOS richiede di nuovo il permesso di
+# Accessibilità.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Test del server
+        run: python3 -m unittest discover -s tests
+      - name: Test del puntatore
+        run: node --test tests/web/*.test.js
+
+  mac-app:
+    runs-on: macos-14
+    needs: test
+    env:
+      MAC_SIGN_P12: ${{ secrets.MAC_SIGN_P12 }}
+      MAC_SIGN_PASSWORD: ${{ secrets.MAC_SIGN_PASSWORD }}
+      MAC_SIGN_IDENTITY: ${{ secrets.MAC_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepara il certificato di firma
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/firma.keychain-db"
+          KC_PASS="$(openssl rand -hex 16)"
+          security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+          if [ -n "$MAC_SIGN_P12" ]; then
+            echo "$MAC_SIGN_P12" | base64 --decode > "$RUNNER_TEMP/firma.p12"
+            P12_PASS="$MAC_SIGN_PASSWORD"
+          else
+            echo "::warning::Manca il secret MAC_SIGN_P12: uso un certificato 'Edoardo Ciarlo' temporaneo."
+            tools/crea_certificato_firma.sh "$RUNNER_TEMP/firma.p12" > "$RUNNER_TEMP/firma.txt"
+            P12_PASS="$(grep MAC_SIGN_PASSWORD "$RUNNER_TEMP/firma.txt" | awk '{print $3}')"
+          fi
+          security import "$RUNNER_TEMP/firma.p12" -k "$KEYCHAIN" -P "$P12_PASS" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASS" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/firma.p12" "$RUNNER_TEMP/firma.txt"
+          echo "TELEMAC_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          echo "TELEMAC_SIGN_IDENTITY=${MAC_SIGN_IDENTITY:-Edoardo Ciarlo}" >> "$GITHUB_ENV"
+
+      - name: Compila e firma TeleMac.app
+        run: |
+          echo "TELEMAC_BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+          TELEMAC_BUILD="$(git rev-list --count HEAD)" tools/build_mac_app.sh --dmg build
+
+      - name: Notarizzazione Apple
+        if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_PASSWORD != ''
+        run: |
+          xcrun notarytool submit build/TeleMac.dmg --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple build/TeleMac.dmg
+
+      - name: Controlla l'app
+        run: |
+          codesign -dv --verbose=2 build/TeleMac.app 2>&1 | grep -E "Identifier|Authority|Format"
+          plutil -lint build/TeleMac.app/Contents/Info.plist
+          test -f build/TeleMac.app/Contents/Resources/telemac/server.py
+          test -f build/TeleMac.app/Contents/Resources/web/panel.html
+          # Il server deve partire dall'interno dell'app e annunciare il pannello.
+          export TELEMAC_HOME="$RUNNER_TEMP/telemac-home" PYTHONDONTWRITEBYTECODE=1
+          (sleep 20) | python3 build/TeleMac.app/Contents/Resources/telemac/server.py --app --dry-run \
+            --port 0 --setup-port 0 > "$RUNNER_TEMP/server.out" 2>&1 &
+          for i in $(seq 1 30); do grep -q '"ready"' "$RUNNER_TEMP/server.out" && break; sleep 0.5; done
+          cat "$RUNNER_TEMP/server.out"
+          grep -q '"ready"' "$RUNNER_TEMP/server.out"
+          # Nessun __pycache__ dentro l'app: la firma deve restare intatta.
+          codesign --verify --strict build/TeleMac.app
+
+      - name: Comprimi l'app
+        run: ditto -c -k --keepParent build/TeleMac.app build/TeleMac.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TeleMac-mac
+          path: |
+            build/TeleMac.dmg
+            build/TeleMac.zip
+
+      - name: Pubblica la release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v4.0.${{ env.TELEMAC_BUILD }}
+          name: TeleMac 4.0 (${{ env.TELEMAC_BUILD }})
+          make_latest: true
+          body: |
+            App per Mac firmata da Edoardo Ciarlo.
+            Scarica **TeleMac.dmg**, aprilo e trascina TeleMac in Applicazioni.
+          files: |
+            build/TeleMac.dmg
+            build/TeleMac.zip

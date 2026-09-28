@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeleMac</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --bg: #03111a;
+    --surface: #0b2331;
+    --surface-2: #133247;
+    --surface-3: #1f4a63;
+    --text: #eaf8fe;
+    --text-2: #86a8ba;
+    --text-3: #4b6b7d;
+    --accent: #1ab8ef;
+    --accent-rgb: 26, 184, 239;
+    --accent-press: #0f9ad0;
+    --accent-ink: #012332;
+    --green: #3ddc97;
+    --green-rgb: 61, 220, 151;
+    --red: #ff5c6c;
+    --yellow: #ffd24a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(90% 55% at 50% -8%, rgba(var(--accent-rgb), .22), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 44px 22px 22px; }
+
+  /* ---- intestazione ---- */
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  header img { width: 46px; height: 46px; border-radius: 11px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  .title { flex: 1; min-width: 0; }
+  .title h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .title p { margin: 1px 0 0; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 999px;
+    background: var(--surface); color: var(--text-2);
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+  .pill[data-tone="ok"] { color: var(--green); }
+  .pill[data-tone="ok"] i { background: var(--green); box-shadow: 0 0 8px rgba(var(--green-rgb), .8); }
+  .pill[data-tone="err"] { color: var(--red); }
+  .pill[data-tone="err"] i { background: var(--red); }
+
+  .banner {
+    border-radius: 12px; padding: 9px 12px; margin-bottom: 14px;
+    background: rgba(255, 210, 74, .1); color: var(--yellow); font-size: 12.5px;
+  }
+
+  /* ---- scheda principale: QR / codice / abbinato ---- */
+  .hero {
+    background: linear-gradient(180deg, #0e2b3d, var(--surface));
+    border: 1px solid rgba(var(--accent-rgb), .18);
+    border-radius: 20px;
+    padding: 22px 20px 20px;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .qr {
+    width: 208px; height: 208px; margin: 0 auto 16px;
+    background: #fff; border-radius: 16px; padding: 8px;
+    box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .25), 0 10px 30px rgba(0,0,0,.35);
+  }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .hero h2 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
+  .hero .sub { margin: 0; color: var(--text-2); }
+  .url {
+    display: inline-block; margin-top: 10px; padding: 4px 10px; border-radius: 8px;
+    background: rgba(var(--accent-rgb), .1); color: var(--accent);
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    -webkit-user-select: text; user-select: text;
+  }
+  .code-label { color: var(--text-2); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+  .code {
+    margin: 10px 0 14px;
+    font: 700 64px/1 ui-rounded, -apple-system, system-ui, sans-serif;
+    letter-spacing: .06em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    text-shadow: 0 0 28px rgba(var(--accent-rgb), .55);
+  }
+  .code span { color: var(--accent); }
+  .bar { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin: 0 30px 8px; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 1s linear; }
+  .done-icon {
+    width: 64px; height: 64px; margin: 6px auto 14px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(var(--green-rgb), .14); color: var(--green);
+  }
+  .done-icon svg { width: 34px; height: 34px; }
+  .hero-empty { padding: 40px 0; color: var(--text-2); }
+
+  /* ---- passi ---- */
+  details { margin-bottom: 20px; }
+  summary {
+    list-style: none; cursor: pointer;
+    color: var(--text-2); font-size: 11.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em; margin: 0 0 8px 4px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: " ▸"; }
+  details[open] summary::after { content: " ▾"; }
+  .steps { margin: 0; padding: 0; list-style: none; }
+  .steps li { display: flex; gap: 12px; align-items: flex-start; padding: 7px 4px; }
+  .steps b {
+    flex: none; width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(var(--accent-rgb), .16); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; font-size: 12px;
+  }
+  .steps span { color: var(--text-2); padding-top: 2px; }
+  .steps strong { color: var(--text); font-weight: 600; }
+
+  /* ---- elenco impostazioni ---- */
+  .group-title { color: var(--text-2); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 8px 4px; }
+  .list { background: var(--surface); border-radius: 14px; overflow: hidden; margin-bottom: 18px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; min-height: 52px; }
+  .row + .row { border-top: 1px solid rgba(var(--accent-rgb), .09); }
+  .row-icon {
+    flex: none; width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(var(--accent-rgb), .15); color: var(--accent);
+  }
+  .row-icon svg { width: 17px; height: 17px; }
+  .row-text { flex: 1; min-width: 0; }
+  .row-text div { font-size: 13.5px; font-weight: 550; }
+  .row-text small { display: block; color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .ok { color: var(--green); }
+  .warn { color: var(--yellow); }
+  svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  button {
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer;
+    background: var(--surface-2); color: var(--text);
+    white-space: nowrap;
+  }
+  button:hover { background: var(--surface-3); }
+  button.primary { background: var(--accent); color: var(--accent-ink); }
+  button.primary:hover { background: var(--accent-press); }
+  button.danger { color: var(--red); }
+  button.danger.armed { background: var(--red); color: #2b0006; }
+  button[disabled] { opacity: .45; cursor: default; }
+
+  .switch {
+    flex: none; position: relative; width: 38px; height: 22px; border-radius: 11px; padding: 0;
+    background: var(--surface-3); transition: background-color 150ms ease;
+  }
+  .switch:hover { background: var(--surface-3); }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform 150ms ease;
+  }
+  .switch[aria-checked="true"], .switch[aria-checked="true"]:hover { background: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(16px); }
+
+  footer { text-align: center; color: var(--text-3); font-size: 11.5px; padding: 4px 0 6px; line-height: 1.6; }
+  footer strong { color: var(--text-2); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="/icon-192.png" alt="">
+    <div class="title">
+      <h1>TeleMac</h1>
+      <p id="computer">Avvio in corso…</p>
+    </div>
+    <span id="pill" class="pill"><i></i><span id="pill-text">Avvio…</span></span>
+  </header>
+
+  <div id="dry-banner" class="banner" hidden>Modalità prova: i comandi dell'iPhone vengono solo registrati, il Mac non si muove.</div>
+  <div id="setup-banner" class="banner" hidden>La porta della pagina di configurazione è occupata: gli iPhone già abbinati funzionano, per abbinarne di nuovi chiudi il programma che la usa e riapri TeleMac.</div>
+
+  <section class="hero" aria-live="polite">
+    <div id="hero-loading" class="hero-empty">Un attimo…</div>
+
+    <div id="hero-qr" hidden>
+      <div class="qr" id="qr"></div>
+      <h2>Inquadra con la fotocamera dell'iPhone</h2>
+      <p class="sub">Si apre la pagina di configurazione di TeleMac.</p>
+      <span class="url" id="setup-url"></span>
+    </div>
+
+    <div id="hero-code" hidden>
+      <div class="code-label">Codice per l'iPhone</div>
+      <div class="code" id="code">000 <span>000</span></div>
+      <div class="bar"><i id="code-bar" style="width:100%"></i></div>
+      <p class="sub" id="code-left">Scade tra 2:00</p>
+    </div>
+
+    <div id="hero-paired" hidden>
+      <div class="done-icon"><svg class="i" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <h2 id="paired-title">iPhone abbinato</h2>
+      <p class="sub">Da ora basta aprire TeleMac sul telefono.</p>
+    </div>
+  </section>
+
+  <details id="how" open>
+    <summary>Come collegare un iPhone</summary>
+    <ol class="steps">
+      <li><b>1</b><span>Inquadra il QR e tocca <strong>Scarica il profilo</strong>, poi in Impostazioni <strong>Profilo scaricato → Installa</strong>.</span></li>
+      <li><b>2</b><span><strong>Impostazioni → Generali → Info → Impostazioni certificati attendibili</strong>: attiva <strong>TeleMac CA</strong>.</span></li>
+      <li><b>3</b><span>Apri TeleMac, aggiungilo alla schermata Home e tocca <strong>Mostra il codice sul Mac</strong>: il codice compare qui.</span></li>
+    </ol>
+  </details>
+
+  <div class="group-title">Mac</div>
+  <div class="list">
+    <div class="row">
+      <div class="row-icon"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="1.8"/><path d="M5 8.5l7 1.5 7-1.5M12 10v5l-3 6M12 15l3 6"/></svg></div>
+      <div class="row-text"><div>Accessibilità</div><small id="ax-text">—</small></div>
+      <button id="ax-btn" class="primary" type="button" hidden>Apri Impostazioni</button>
+    </div>
+    <div class="row" id="login-row" hidden>
+      <div class="row-icon"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.5a8 8 0 1011.4 0"/></svg></div>
+      <div class="row-text"><div>Apri all'accensione del Mac</div><small id="login-text">TeleMac parte da solo, senza finestre.</small></div>
+      <button id="login-switch" class="switch" type="button" role="switch" aria-checked="false" aria-label="Apri all'accensione del Mac"></button>
+    </div>
+  </div>
+
+  <div class="group-title">iPhone</div>
+  <div class="list">
+    <div class="row">
+      <div class="row-icon"><svg class="i" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div>
+      <div class="row-text"><div>Abbinati</div><small id="devices-text">Nessuno</small></div>
+      <button id="forget-btn" class="danger" type="button" disabled>Scollega tutti</button>
+    </div>
+    <div class="row">
+      <div class="row-icon"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <div class="row-text"><div>Profilo del certificato</div><small id="profile-text">Da mandare all'iPhone con AirDrop, in alternativa al QR.</small></div>
+      <button id="profile-btn" type="button" hidden>Mostra nel Finder</button>
+    </div>
+  </div>
+
+  <footer>
+    <div>TeleMac <span id="version">4.0</span> · firmata da <strong>Edoardo Ciarlo</strong></div>
+    <div>© 2026 Edoardo Ciarlo</div>
+  </footer>
+</div>
+
+<script>
+"use strict";
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.telemac;
+  const native = bridge ? { loginItem: null, axTrusted: null, version: null } : null;
+  let status = null;
+  let lastError = false;
+  let codeTotal = 120;
+  let shownCode = null;
+
+  function send(action, extra) {
+    if (bridge) bridge.postMessage(Object.assign({ action: action }, extra || {}));
+  }
+
+  // L'app per Mac chiama questa funzione per passarci il suo stato.
+  window.telemacNativeUpdate = function (state) {
+    if (!native || !state) return;
+    Object.assign(native, state);
+    render();
+  };
+
+  function show(id) {
+    ["hero-loading", "hero-qr", "hero-code", "hero-paired"].forEach((h) => { $(h).hidden = h !== id; });
+  }
+
+  function fmtLeft(s) {
+    const m = Math.floor(s / 60);
+    const r = String(s % 60).padStart(2, "0");
+    return m + ":" + r;
+  }
+
+  function render() {
+    const pill = $("pill");
+    if (!status) {
+      if (lastError) { pill.dataset.tone = "err"; $("pill-text").textContent = "Server fermo"; }
+      return;
+    }
+    if (lastError) {
+      pill.dataset.tone = "err";
+      $("pill-text").textContent = "Server fermo";
+    } else {
+      pill.dataset.tone = "ok";
+      $("pill-text").textContent = "In funzione";
+    }
+    $("computer").textContent = status.computerName + (status.ip ? " · " + status.ip : "");
+    $("dry-banner").hidden = !status.dryRun;
+    $("setup-banner").hidden = !!status.setupUrl;
+
+    if (status.pairing) {
+      const code = status.pairing.code;
+      if (code !== shownCode) { codeTotal = Math.max(status.pairing.expiresIn, 1); shownCode = code; }
+      $("code").innerHTML = "";
+      $("code").append(code.slice(0, 3) + " ");
+      const tail = document.createElement("span");
+      tail.textContent = code.slice(3);
+      $("code").append(tail);
+      $("code-bar").style.width = Math.min(100, (status.pairing.expiresIn / codeTotal) * 100) + "%";
+      $("code-left").textContent = "Scrivilo sull'iPhone · scade tra " + fmtLeft(status.pairing.expiresIn);
+      show("hero-code");
+    } else if (status.paired) {
+      shownCode = null;
+      $("paired-title").textContent = (status.paired.device || "iPhone") + " abbinato";
+      show("hero-paired");
+    } else if (status.qrSvg) {
+      shownCode = null;
+      if ($("qr").dataset.url !== status.setupUrl) {
+        $("qr").innerHTML = status.qrSvg; // SVG generato dal nostro server
+        $("qr").dataset.url = status.setupUrl;
+        $("setup-url").textContent = status.setupUrl;
+      }
+      show("hero-qr");
+    } else {
+      show("hero-loading");
+      $("hero-loading").textContent = "Pagina di configurazione non disponibile.";
+    }
+
+    // Accessibilità: vale lo stato dell'app, se c'è, se no quello del server.
+    const ax = native && native.axTrusted !== null ? native.axTrusted : status.accessibility;
+    if (ax === true) {
+      $("ax-text").innerHTML = '<span class="ok">Concessa</span> · TeleMac può muovere mouse e tastiera';
+      $("ax-btn").hidden = true;
+    } else if (ax === false) {
+      $("ax-text").innerHTML = '<span class="warn">Da attivare</span> · senza, il Mac ignora i comandi';
+      $("ax-btn").hidden = !bridge;
+    } else {
+      $("ax-text").textContent = status.dryRun ? "Non serve in modalità prova" : "Non disponibile su questo sistema";
+      $("ax-btn").hidden = true;
+    }
+
+    const devices = status.devices || [];
+    $("devices-text").textContent = devices.length === 0
+      ? "Nessuno"
+      : devices.map((d) => d.name).join(", ");
+    $("forget-btn").disabled = devices.length === 0;
+    if (!$("how").dataset.touched) $("how").open = devices.length === 0;
+
+    $("profile-btn").hidden = !bridge;
+    if (!bridge) $("profile-text").textContent = status.profilePath;
+
+    if (native && native.loginItem && native.loginItem !== "unsupported") {
+      $("login-row").hidden = false;
+      $("login-switch").setAttribute("aria-checked", native.loginItem === "on" ? "true" : "false");
+      $("login-text").textContent = native.loginItem === "approval"
+        ? "Da approvare in Impostazioni → Generali → Elementi login."
+        : "TeleMac parte da solo, senza finestre.";
+    }
+    if (native && native.version) $("version").textContent = native.version;
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch("/api/status", { cache: "no-store", headers: { "X-TeleMac-Token": token } });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      status = await res.json();
+      lastError = false;
+    } catch (e) {
+      lastError = true;
+    }
+    render();
+  }
+
+  // Dopo il primo clic sul titolo decide l'utente se tenere i passi aperti.
+  document.querySelector("#how summary").addEventListener("click", () => { $("how").dataset.touched = "1"; });
+  $("ax-btn").addEventListener("click", () => send("openAccessibility"));
+  $("profile-btn").addEventListener("click", () => send("revealProfile"));
+  $("login-switch").addEventListener("click", () => {
+    const on = $("login-switch").getAttribute("aria-checked") !== "true";
+    $("login-switch").setAttribute("aria-checked", on ? "true" : "false");
+    send("setLoginItem", { enabled: on });
+  });
+
+  let armTimer = null;
+  $("forget-btn").addEventListener("click", async () => {
+    const btn = $("forget-btn");
+    if (!btn.classList.contains("armed")) {
+      // Primo clic: chiediamo conferma sul pulsante stesso.
+      btn.classList.add("armed");
+      btn.textContent = "Conferma";
+      armTimer = setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Scollega tutti"; }, 4000);
+      return;
+    }
+    clearTimeout(armTimer);
+    btn.classList.remove("armed");
+    btn.textContent = "Scollega tutti";
+    try {
+      await fetch("/api/forget-devices", { method: "POST", headers: { "X-TeleMac-Token": token } });
+    } catch (e) { /* il prossimo aggiornamento mostrerà lo stato vero */ }
+    refresh();
+  });
+
+  send("hello");
+  refresh();
+  setInterval(refresh, 1000);
+})();
+</script>
+</body>
+</html>

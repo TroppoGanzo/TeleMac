@@ -7,15 +7,18 @@
 <meta name="robots" content="noindex">
 <style>
   :root {
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --text: #f2f2f7;
-    --text-2: #8e8e93;
-    --accent: #0a84ff;
-    --green: #30d158;
-    --red: #ff453a;
-    --yellow: #ffd60a;
+    --bg: #03111a;
+    --surface: #0b2331;
+    --surface-2: #133247;
+    --text: #eaf8fe;
+    --text-2: #86a8ba;
+    --text-3: #4b6b7d;
+    --accent: #1ab8ef;
+    --accent-press: #0f9ad0;
+    --accent-ink: #012332;
+    --green: #3ddc97;
+    --red: #ff5c6c;
+    --yellow: #ffd24a;
     color-scheme: dark;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -31,7 +34,7 @@
   h1 { font-size: 24px; margin: 6px 0 4px; }
   .lead { color: var(--text-2); font-size: 14.5px; margin: 0 0 24px; line-height: 1.5; }
   .preview-banner {
-    background: #3a2f06;
+    background: #2e2a0c;
     color: var(--yellow);
     border-radius: 12px;
     padding: 10px 14px;
@@ -56,7 +59,7 @@
     font-weight: 700;
     font-size: 14.5px;
   }
-  .step-num.done { background: var(--green); color: #06280f; }
+  .step-num.done { background: var(--green); color: #032516; }
   .step-body { flex: 1; min-width: 0; }
   .step h2 { font-size: 17px; margin: 4px 0 6px; }
   .step p { color: var(--text-2); font-size: 14px; line-height: 1.5; margin: 0 0 12px; }
@@ -68,14 +71,14 @@
     padding: 14px;
     border-radius: 14px;
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-ink);
     font-size: 15.5px;
     font-weight: 600;
     text-decoration: none;
     border: none;
     font-family: inherit;
   }
-  .btn:active { background: #0a6fd6; }
+  .btn:active { background: var(--accent-press); }
   .btn[disabled], .btn.disabled {
     background: var(--surface-2);
     color: var(--text-2);
@@ -112,7 +115,7 @@
     margin-top: 30px;
     text-align: center;
     font-size: 11.5px;
-    color: #48484a;
+    color: var(--text-3);
   }
 </style>
 </head>
@@ -122,7 +125,7 @@
   <p class="lead" id="lead">Tre passi, una volta sola: dopo il primo abbinamento il tuo iPhone si ricorderà di questo Mac.</p>
   <div id="preview-banner" class="preview-banner" hidden>
     Questa è un'anteprima statica della pagina: i pulsanti usano dati di esempio.
-    Apri questa pagina dal Mac (indirizzo mostrato nel Terminale) per configurare davvero.
+    Inquadra il QR nella finestra di TeleMac sul Mac per configurare davvero.
   </div>
 
   <div class="step">

@@ -1,7 +1,7 @@
 name: Deploy GitHub Pages
 
 # Pubblica web/ (la sola app per iPhone, in modalità demo) su GitHub Pages.
-# setup.html non viene incluso: ha senso solo servito dal Mac.
+# setup.html e panel.html non vengono inclusi: hanno senso solo serviti dal Mac.
 
 on:
   push:
@@ -29,11 +29,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepara il sito (senza setup.html)
+      - name: Prepara il sito (senza setup.html e panel.html)
         run: |
           mkdir -p _site
           cp -r web/. _site/
-          rm -f _site/setup.html
+          rm -f _site/setup.html _site/panel.html
 
       - name: Configura GitHub Pages
         uses: actions/configure-pages@v5

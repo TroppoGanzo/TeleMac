@@ -1,7 +1,8 @@
 """Controllo di mouse e tastiera su macOS tramite CoreGraphics (via ctypes, zero dipendenze).
 
-Richiede che l'app che avvia il server (di solito il Terminale) sia autorizzata in
-Impostazioni di Sistema → Privacy e sicurezza → Accessibilità.
+Richiede che l'app che avvia il server (TeleMac.app, o il Terminale per chi lo
+lancia a mano) sia autorizzata in Impostazioni di Sistema → Privacy e
+sicurezza → Accessibilità.
 """
 
 from __future__ import annotations
@@ -91,6 +92,39 @@ _SEL_OTHER_EVENT = sel_registerName(
     b"otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:"
 )
 _SEL_CGEVENT = sel_registerName(b"CGEvent")
+
+
+def hide_from_dock():
+    """Niente icona di Python (il razzo) nel Dock.
+
+    Il server è un processo di sfondo: appena parla con il window server (per i
+    tasti multimediali o il cursore grande) macOS lo tratterebbe come un'app
+    "Python" con la sua icona. Lo segniamo come agente senza interfaccia prima
+    che succeda. Va chiamata dal thread principale, una volta sola."""
+    try:
+        send_id = ctypes.CFUNCTYPE(c_void_p, c_void_p, c_void_p)(_MSG_SEND)
+        send_str = ctypes.CFUNCTYPE(c_void_p, c_void_p, c_void_p, c_char_p)(_MSG_SEND)
+        send_responds = ctypes.CFUNCTYPE(c_bool, c_void_p, c_void_p, c_void_p)(_MSG_SEND)
+        send_set = ctypes.CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p)(_MSG_SEND)
+        send_policy = ctypes.CFUNCTYPE(c_bool, c_void_p, c_void_p, c_long)(_MSG_SEND)
+        pool = objc_autoreleasePoolPush()
+        try:
+            ns_string = objc_getClass(b"NSString")
+            sel_utf8 = sel_registerName(b"stringWithUTF8String:")
+            bundle = send_id(objc_getClass(b"NSBundle"), sel_registerName(b"mainBundle"))
+            info = send_id(bundle, sel_registerName(b"infoDictionary")) if bundle else None
+            sel_set = sel_registerName(b"setObject:forKey:")
+            # Solo se il dizionario è modificabile: altrimenti ObjC solleverebbe
+            # un'eccezione che da ctypes non si può intercettare.
+            if info and send_responds(info, sel_registerName(b"respondsToSelector:"), sel_set):
+                send_set(info, sel_set, send_str(ns_string, sel_utf8, b"1"), send_str(ns_string, sel_utf8, b"LSUIElement"))
+            app = send_id(objc_getClass(b"NSApplication"), sel_registerName(b"sharedApplication"))
+            if app:
+                send_policy(app, sel_registerName(b"setActivationPolicy:"), 2)  # Prohibited: mai nel Dock
+        finally:
+            objc_autoreleasePoolPop(pool)
+    except Exception:
+        pass
 
 kCGHIDEventTap = 0
 kCGEventLeftMouseDown = 1

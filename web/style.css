@@ -1,13 +1,22 @@
 :root {
-  --bg: #000000;
-  --surface: #1c1c1e;
-  --surface-2: #2c2c2e;
-  --text: #f2f2f7;
-  --text-2: #8e8e93;
-  --accent: #0a84ff;
-  --green: #30d158;
-  --red: #ff453a;
-  --yellow: #ffd60a;
+  /* Tutto parte da un solo colore: il blu ciano di TeleMac (--accent).
+     Sfondi, superfici e testi sono lo stesso tono, via via più scuri. */
+  --bg: #03111a;
+  --surface: #0b2331;
+  --surface-2: #133247;
+  --surface-3: #1f4a63;
+  --text: #eaf8fe;
+  --text-2: #86a8ba;
+  --text-3: #4b6b7d;
+  --accent: #1ab8ef;
+  --accent-rgb: 26, 184, 239;
+  --accent-press: #0f9ad0;
+  --accent-deep: #0a6e9c;
+  --accent-ink: #012332;
+  --green: #3ddc97;
+  --green-rgb: 61, 220, 151;
+  --red: #ff5c6c;
+  --yellow: #ffd24a;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
@@ -102,7 +111,7 @@ body.island-fixed #app { padding-top: var(--safe-t); }
   justify-content: center;
   gap: 7px;
   background: #000;
-  color: #fff;
+  color: var(--text);
   border-radius: 19px;
   width: 126px;
   height: 37px;
@@ -237,7 +246,7 @@ body.island-fixed .island {
 .power-btn svg.icon { width: 22px; height: 22px; stroke-width: 2.4; }
 .power-btn[aria-checked="true"] {
   color: var(--green);
-  box-shadow: inset 0 0 0 2px rgba(48,209,88,.55), 0 0 14px rgba(48,209,88,.25);
+  box-shadow: inset 0 0 0 2px rgba(var(--green-rgb),.55), 0 0 14px rgba(var(--green-rgb),.25);
 }
 .power-btn:active { transform: scale(.94); }
 
@@ -278,7 +287,7 @@ body.island-fixed .island {
   width: 51px;
   height: 31px;
   border-radius: 16px;
-  background: #39393d;
+  background: var(--surface-3);
   position: relative;
   transition: background-color 150ms ease;
 }
@@ -321,8 +330,8 @@ body.island-fixed .island {
   height: var(--pad-size);
   border-radius: 50%;
   position: relative;
-  background: radial-gradient(circle at 50% 35%, #26262a, var(--surface) 70%);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+  background: radial-gradient(circle at 50% 35%, #173a50, var(--surface) 70%);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb),.14);
   touch-action: none;
   flex: none;
   overflow: hidden;
@@ -362,7 +371,7 @@ body.island-fixed .island {
   height: 22px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 0 5px rgba(10,132,255,.35), 0 0 16px rgba(10,132,255,.8);
+  box-shadow: 0 0 0 5px rgba(var(--accent-rgb),.35), 0 0 16px rgba(var(--accent-rgb),.8);
 }
 .knob-center {
   position: absolute;
@@ -416,7 +425,7 @@ body.island-fixed .island {
   opacity: 0;
   transition: opacity 100ms ease;
   background: conic-gradient(from -45deg,
-    rgba(10,132,255,.5) 0deg 90deg,
+    rgba(var(--accent-rgb),.5) 0deg 90deg,
     transparent 90deg 360deg);
 }
 .pad-glow[data-dir="up"] { transform: rotate(0deg); }
@@ -444,10 +453,11 @@ body.island-fixed .island {
 }
 .clickpad.pressed-center .pad-center {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 .clickpad.dragging .pad-center {
-  background: #0a5fb8;
+  background: var(--accent-deep);
+  color: var(--text);
 }
 
 /* ---------- Righe di pulsanti ---------- */
@@ -546,7 +556,7 @@ body.island-fixed .island {
   gap: 12px;
   width: 100%;
   padding: 13px 14px;
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  border-bottom: 1px solid rgba(var(--accent-rgb),.10);
   color: var(--text);
   font-size: 16px;
   text-align: left;
@@ -564,7 +574,7 @@ body.island-fixed .island {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  border-bottom: 1px solid rgba(var(--accent-rgb),.10);
   font-size: 15.5px;
 }
 .list .setting-row:last-child { border-bottom: none; }
@@ -590,13 +600,13 @@ body.island-fixed .island {
   border-radius: 7px;
   color: var(--text-2);
 }
-.segmented button.active { background: #545458; color: var(--text); }
+.segmented button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
 .switch-mini {
   width: 51px;
   height: 31px;
   border-radius: 16px;
-  background: #39393d;
+  background: var(--surface-3);
   position: relative;
   flex: none;
 }
@@ -627,11 +637,11 @@ body.island-fixed .island {
   max-width: 230px;
   margin: 0 auto;
   aspect-ratio: 16 / 9;
-  background: #0b0b0c;
+  background: #020b11;
   border-radius: 14px;
   overflow: hidden;
   position: relative;
-  border: 1px solid #2c2c2e;
+  border: 1px solid var(--surface-2);
 }
 
 /* La scheda Telecomando, in modalità demo, deve fare spazio allo schermo finto:
@@ -668,7 +678,7 @@ body.island-fixed .island {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: #000;
+  background: radial-gradient(120% 70% at 50% 0%, #0d3346, var(--bg) 70%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -702,9 +712,9 @@ body.island-fixed .island {
   font-weight: 600;
   border-radius: 14px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
-.btn-primary:active { background: #0a6fd6; }
+.btn-primary:active { background: var(--accent-press); }
 .btn-primary[disabled] { opacity: .5; }
 
 #pair-code {
@@ -721,7 +731,7 @@ body.island-fixed .island {
   -webkit-user-select: text;
   user-select: text;
 }
-#pair-code::placeholder { color: #48484a; letter-spacing: 0.2em; }
+#pair-code::placeholder { color: var(--text-3); letter-spacing: 0.2em; }
 
 #pair-error.pairing-error {
   min-height: 18px;
