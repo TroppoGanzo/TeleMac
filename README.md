@@ -75,18 +75,19 @@ Terminale da tenere aperta.
 
 ## Come si usa
 
-**Telecomando**
+**Telecomando**, fatto come quello dell'Apple TV:
 
-- **Puntatore**: accendi l'interruttore e muovi il telefono per spostare il cursore.
-  Funziona sia tenendolo piatto sia dritto.
-- **Cerchio centrale**: con il puntatore acceso è il clic; tenendo premuto trascini. A
-  puntatore spento è *OK* (Invio).
-  - Mentre il dito è sul centro il cursore si ferma, così il clic arriva dove miravi.
-- **Frecce del cerchio**: frecce della tastiera. Nei player video servono ad andare
-  avanti e indietro. Tenendole premute si ripetono.
-- **Tasti sotto il cerchio**: Indietro (Esc), Play/Pausa, Schermo intero, Volume −/+,
-  Muto, Clic destro, Precedente/Successivo.
-- **Striscia "Scorri"**: trascina il dito per scorrere le pagine.
+- **Puntatore sempre attivo**: muovi il telefono e il cursore lo segue, sia tenendolo
+  piatto sia dritto. Al primo tocco iOS chiede il permesso al movimento: rispondi
+  *Consenti* una volta.
+- **Cerchio in basso**, alla portata del pollice:
+  - **centro** = clic; tenendo premuto trascini. Mentre il dito è sul centro il
+    cursore si ferma, così il clic arriva dove miravi;
+  - **frecce** = frecce della tastiera: nei video vai avanti/indietro, nelle pagine
+    scorri. Tenendole premute si ripetono;
+  - **manopola del volume**: appoggia il dito sull'anello e giralo come la manopola
+    di una radio, in senso orario alzi, in senso antiorario abbassi.
+- **In alto quattro tasti**: Clic destro, Play/Pausa, Tastiera, Altro.
 
 **Tastiera**
 
@@ -95,10 +96,11 @@ Cancella, Tab, Esc, Spotlight, Barra degli indirizzi e Cerca.
 
 **Altro**
 
+- Video: Indietro (Esc), Schermo intero, Muto, Precedente/Successivo.
 - Cambia app, Mission Control, comandi del browser, spegni schermo.
 - **Impostazioni**:
   - sensibilità del puntatore;
-  - inversione degli assi;
+  - inversione degli assi e ricalibrazione del giroscopio;
   - tasto Play (multimediale o Spazio);
   - vibrazione;
   - *Dimentica questo Mac*.
@@ -112,7 +114,7 @@ Quando l'app è aperta a schermo intero la pillola esce dalla Dynamic Island.
 |---|---|
 | "Mac non raggiungibile" | Il server è acceso? Mac e iPhone sono sullo stesso Wi-Fi? Riapri `TeleMac.command` per controllare. |
 | La pagina dice che il sito non è sicuro | Manca il passo 3 della configurazione (fiducia nel certificato). |
-| Il puntatore non si attiva | Chiudi l'app dal multitasking, riaprila, accendi il puntatore e tocca **Consenti** quando iOS chiede l'accesso al movimento. |
+| Il puntatore non si muove | Chiudi l'app dal multitasking, riaprila, tocca un tasto e rispondi **Consenti** quando iOS chiede l'accesso al movimento. |
 | Il cursore va nella direzione sbagliata | *Altro → Impostazioni → Inverti orizzontale/verticale*. |
 | Il cursore è troppo lento o veloce | *Altro → Impostazioni → Sensibilità*. |
 | Il Mac non reagisce ai comandi | Manca il permesso di Accessibilità (la pillola in alto te lo segnala). |

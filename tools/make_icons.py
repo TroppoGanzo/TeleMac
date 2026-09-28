@@ -5,10 +5,9 @@ Piccolo motore di disegno vettoriale scritto a mano, con antialiasing per
 supersampling (4x4 campioni per pixel) e compressione PNG via `zlib`: nessuna
 dipendenza esterna, solo libreria standard.
 
-Disegno: quadrato con un leggero gradiente verticale grafite -> nero, un
-telecomando stilizzato (clickpad circolare grigio chiaro con pulsante
-centrale e 4 puntini per le zone direzionali) e un piccolo arco "onde"
-azzurro in alto a destra che richiama il segnale senza fili.
+Disegno: sfondo azzurro con un gradiente morbido in diagonale e, al centro,
+la sagoma bianca di un telecomando stile Siri Remote (clickpad circolare in
+alto e due tasti tondi sotto), con un'ombra leggera sfumata.
 
 iOS arrotonda da solo gli angoli delle icone della schermata Home: qui NON
 arrotondiamo nulla e non usiamo trasparenza (l'immagine è RGB piena, niente
@@ -25,14 +24,13 @@ from typing import Tuple
 
 Color = Tuple[int, int, int]
 
-# --- Palette (vedi SPEC §5) -------------------------------------------------
-BG_TOP: Color = (0x2C, 0x2C, 0x2E)
-BG_BOTTOM: Color = (0x00, 0x00, 0x00)
-PAD_COLOR: Color = (0xE4, 0xE4, 0xE8)      # clickpad, grigio chiaro
-PAD_RIM: Color = (0xC6, 0xC6, 0xCC)        # bordo interno leggermente più scuro
-CENTER_COLOR: Color = (0xB6, 0xB6, 0xBE)   # pulsante centrale
-DOT_COLOR: Color = (0x8E, 0x8E, 0x93)      # puntini direzionali
-SIGNAL_COLOR: Color = (0x0A, 0x84, 0xFF)   # onde di segnale azzurre
+# --- Palette ---------------------------------------------------------------
+BG_A: Color = (0x7A, 0xB2, 0xFF)       # azzurro chiaro (in alto a sinistra)
+BG_B: Color = (0x3B, 0x5B, 0xF0)       # blu (in basso a destra)
+SHADOW: Color = (0x1E, 0x2F, 0x9E)     # ombra del telecomando
+BODY: Color = (0xFF, 0xFF, 0xFF)       # corpo del telecomando
+PAD: Color = (0xDF, 0xE7, 0xFA)        # clickpad e tasti, grigio-azzurro tenue
+PAD_CENTER: Color = (0xF6, 0xF8, 0xFF) # pulsante centrale del clickpad
 
 ICON_SIZES = (180, 192, 512)
 _SUB = 4  # supersampling 4x4 = 16 campioni per pixel
@@ -52,55 +50,51 @@ def _mix(c1: Color, c2: Color, t: float) -> Color:
     )
 
 
+def _rounded_rect_dist(u: float, v: float, cx: float, cy: float, hw: float, hh: float, r: float) -> float:
+    """Distanza con segno da un rettangolo arrotondato (negativa dentro)."""
+    qx = abs(u - cx) - (hw - r)
+    qy = abs(v - cy) - (hh - r)
+    ox, oy = max(qx, 0.0), max(qy, 0.0)
+    return (ox * ox + oy * oy) ** 0.5 + min(max(qx, qy), 0.0) - r
+
+
+def _in_circle(u: float, v: float, cx: float, cy: float, r: float) -> bool:
+    dx, dy = u - cx, v - cy
+    return dx * dx + dy * dy <= r * r
+
+
 def _sample(u: float, v: float, size: float) -> Color:
     """Colore nel punto continuo (u, v) (coordinate pixel, 0..size)."""
-    # Sfondo: gradiente verticale grafite -> nero.
-    color = _mix(BG_TOP, BG_BOTTOM, v / size)
+    # Sfondo: gradiente diagonale morbido.
+    color = _mix(BG_A, BG_B, (u + v) / (2 * size))
 
-    # Onde di segnale: archi concentrici che si irradiano dall'angolo in alto
-    # a destra verso il centro dell'icona (un quarto di cerchio per arco).
-    # Disegnate PRIMA del clickpad, che deve restare sempre un cerchio pulito
-    # anche dove le due forme si sovrappongono.
-    sx, sy = size * 0.86, size * 0.14
-    ex, ey = u - sx, v - sy
-    if ex <= 0.0 and ey >= 0.0:
-        e2 = ex * ex + ey * ey
-        stroke = size * 0.026
-        for radius in (size * 0.085, size * 0.155, size * 0.225):
-            lo, hi = radius - stroke, radius + stroke
-            if lo * lo <= e2 <= hi * hi:
-                color = SIGNAL_COLOR
-                break
-        else:
-            dot_r = size * 0.024
-            if e2 <= dot_r * dot_r:
-                color = SIGNAL_COLOR
+    # Telecomando: rettangolo verticale molto arrotondato, centrato.
+    cx, cy = size * 0.5, size * 0.5
+    hw, hh, r = size * 0.175, size * 0.33, size * 0.175
 
-    # Clickpad circolare, centrato leggermente sotto il centro del quadrato.
-    cx, cy = size * 0.5, size * 0.565
-    pad_r = size * 0.335
-    dx, dy = u - cx, v - cy
-    d2 = dx * dx + dy * dy
+    # Ombra: stessa forma spostata in basso, sfumata sulla distanza.
+    shadow_d = _rounded_rect_dist(u, v, cx, cy + size * 0.03, hw, hh, r)
+    blur = size * 0.06
+    if shadow_d < blur:
+        strength = 0.35 * min(1.0, (blur - shadow_d) / blur) ** 2
+        color = _mix(color, SHADOW, strength)
 
-    if d2 <= pad_r * pad_r:
-        color = PAD_COLOR
-        rim_r = pad_r * 0.9
-        if d2 >= rim_r * rim_r:
-            color = PAD_RIM
+    if _rounded_rect_dist(u, v, cx, cy, hw, hh, r) > 0.0:
+        return color
 
-        center_r = size * 0.125
-        if d2 <= center_r * center_r:
-            color = CENTER_COLOR
-        else:
-            dot_r = size * 0.028
-            dot_dist = size * 0.225
-            for ddx, ddy in ((0.0, -1.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)):
-                px, py = cx + ddx * dot_dist, cy + ddy * dot_dist
-                ddx2, ddy2 = u - px, v - py
-                if ddx2 * ddx2 + ddy2 * ddy2 <= dot_r * dot_r:
-                    color = DOT_COLOR
-                    break
-
+    color = BODY
+    top = cy - hh
+    pad_cy = top + size * 0.175
+    if _in_circle(u, v, cx, pad_cy, size * 0.128):
+        color = PAD
+        if _in_circle(u, v, cx, pad_cy, size * 0.05):
+            color = PAD_CENTER
+        return color
+    for bx in (cx - size * 0.068, cx + size * 0.068):
+        if _in_circle(u, v, bx, top + size * 0.39, size * 0.042):
+            return PAD
+    if _in_circle(u, v, cx, top + size * 0.51, size * 0.042):
+        return PAD
     return color
 
 

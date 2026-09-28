@@ -169,61 +169,82 @@ body.island-fixed .island {
   flex: 1;
   min-height: 0;
   flex-direction: column;
-  padding: 6px 14px 10px;
+  padding: 6px 18px calc(18px + var(--safe-b));
   overflow: hidden;
 }
 .panel.active { display: flex; }
-.panel-scroll.active {
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
 
-.tabbar {
+/* ---------- Pannelli Tastiera / Altro (salgono dal basso) ---------- */
+
+.sheet {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--bg);
+  padding-top: max(12px, var(--safe-t));
+  transform: translateY(100%);
+  visibility: hidden;
+  transition: transform 320ms cubic-bezier(.2,.8,.2,1), visibility 0s linear 320ms;
+}
+.sheet.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 320ms cubic-bezier(.2,.8,.2,1);
+}
+.sheet-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+@media (prefers-reduced-motion: reduce) {
+  .sheet, .sheet.open { transition: none; }
+}
+.sheet-header {
   flex: none;
   display: flex;
-  border-top: 1px solid #2c2c2e;
-  background: #000;
-  padding-bottom: var(--safe-b);
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 2px 10px;
 }
-.tab {
-  flex: 1;
+.sheet-header h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.sheet-done {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 600;
+  padding: 8px 4px 8px 16px;
+}
+
+/* ---------- Telecomando: pulsanti in alto ---------- */
+
+.top-buttons {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px 10px;
+  width: 100%;
+  max-width: 300px;
+  margin: 14px auto 0;
+}
+.round-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 7px 0 8px;
-  color: var(--text-2);
+  gap: 7px;
 }
-.tab svg.icon { width: 24px; height: 24px; margin: 0 auto; }
-.tab span { font-size: 10.5px; font-weight: 500; }
-.tab.active { color: var(--accent); }
-
-/* ---------- Telecomando: interruttore puntatore ---------- */
-
-.remote-top {
-  flex: none;
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 10px;
-}
-
-.pointer-switch {
+.round-btn-face {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  max-width: 340px;
-  padding: 10px 16px;
+  justify-content: center;
   background: var(--surface);
-  border-radius: 14px;
+  color: var(--text);
+  transition: background-color 80ms ease, transform 80ms ease;
 }
-.pointer-switch .switch-label {
-  flex: 1;
-  text-align: left;
-  font-size: 16px;
-  font-weight: 590;
-}
+.round-btn-face svg.icon { width: 26px; height: 26px; }
+.round-btn-label { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.round-btn.accent-active .round-btn-face,
+.round-btn:active .round-btn-face { background: var(--surface-2); transform: scale(0.94); }
+.round-btn.accent-active .round-btn-face { color: var(--accent); }
+
 .switch-track {
   flex: none;
   width: 51px;
@@ -244,27 +265,27 @@ body.island-fixed .island {
   box-shadow: 0 2px 4px rgba(0,0,0,.3);
   transition: transform 150ms ease;
 }
-.pointer-switch[aria-checked="true"] .switch-track { background: var(--green); }
-.pointer-switch[aria-checked="true"] .switch-thumb { transform: translateX(20px); }
 
-.pointer-hint {
+.remote-spacer { flex: 1; min-height: 12px; }
+
+.pad-hint {
   flex: none;
+  margin: 0 0 12px;
   text-align: center;
   color: var(--text-2);
-  font-size: 12.5px;
-  padding: 0 12px 8px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* ---------- Clickpad ---------- */
 
 .pad-row {
-  --pad-size: min(76vw, 44vh, 300px);
+  --pad-size: min(84vw, 46vh, 330px);
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 2px 0 10px;
+  padding: 0;
 }
 
 .clickpad {
@@ -272,11 +293,15 @@ body.island-fixed .island {
   height: var(--pad-size);
   border-radius: 50%;
   position: relative;
-  background: var(--surface);
+  background: radial-gradient(circle at 50% 35%, #26262a, var(--surface) 70%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
   touch-action: none;
   flex: none;
   overflow: hidden;
+  transition: box-shadow 150ms ease;
 }
+/* Manopola del volume: l'anello si illumina mentre il dito gira. */
+.clickpad.knob { box-shadow: inset 0 0 0 3px var(--accent); }
 
 .pad-zone {
   position: absolute;
@@ -330,44 +355,6 @@ body.island-fixed .island {
 }
 .clickpad.dragging .pad-center {
   background: #0a5fb8;
-}
-
-.scrollbar {
-  flex: none;
-  width: 40px;
-  height: var(--pad-size);
-  border-radius: 20px;
-  background: var(--surface);
-  touch-action: none;
-  position: relative;
-  overflow: hidden;
-}
-.scrollbar svg.icon {
-  position: absolute;
-  left: 50%;
-  width: 16px;
-  height: 16px;
-  color: var(--text-2);
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-.scrollbar .scroll-up-hint { top: 8px; }
-.scrollbar .scroll-down-hint { bottom: 8px; }
-.scrollbar.active .scroll-thumb {
-  opacity: 1;
-}
-.scroll-thumb {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  top: 50%;
-  height: 44px;
-  margin-top: -22px;
-  border-radius: 10px;
-  background: rgba(10,132,255,.55);
-  opacity: 0;
-  transition: opacity 120ms ease;
-  pointer-events: none;
 }
 
 /* ---------- Righe di pulsanti ---------- */
@@ -556,11 +543,9 @@ body.island-fixed .island {
 
 /* La scheda Telecomando, in modalità demo, deve fare spazio allo schermo finto:
    qui restringiamo un po' pad e righe così tutto resta visibile senza scorrere. */
-body.demo-mode .remote-top { padding: 6px 0 10px; }
-body.demo-mode .pointer-hint { margin: 0 0 10px; font-size: 11.5px; }
-body.demo-mode .pad-row { padding: 4px 0 10px; --pad-size: min(64vw, 32vh, 252px); }
-body.demo-mode .row { padding: 6px 0; }
-body.demo-mode .btn { min-height: 48px; padding: 7px 4px; }
+body.demo-mode .top-buttons { margin-top: 6px; gap: 10px; }
+body.demo-mode .round-btn-face { width: 56px; height: 56px; }
+body.demo-mode .pad-row { --pad-size: min(74vw, 36vh, 280px); }
 #demo-canvas { width: 100%; height: 100%; display: block; }
 .demo-caption {
   margin: 6px 2px 0;

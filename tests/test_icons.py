@@ -104,14 +104,16 @@ class TestContenutoNonBanale(unittest.TestCase):
         pixels = {rows[y][x * 3 : x * 3 + 3] for y in range(0, len(rows), 3) for x in range(0, len(rows[0]) // 3, 3)}
         self.assertGreater(len(pixels), 10)
 
-    def test_contiene_il_colore_di_segnale_azzurro(self):
-        data = make_icon_png(192)
-        rows = _decode_rgb_rows(data)
-        target = bytes((0x0A, 0x84, 0xFF))
-        found = any(
-            rows[y][x * 3 : x * 3 + 3] == target for y in range(len(rows)) for x in range(len(rows[0]) // 3)
-        )
-        self.assertTrue(found, "manca il colore delle onde di segnale #0a84ff")
+    def test_telecomando_bianco_centrato(self):
+        # Il centro dell'icona cade sul corpo bianco del telecomando, gli angoli
+        # sullo sfondo azzurro: il disegno è centrato.
+        size = 192
+        rows = _decode_rgb_rows(make_icon_png(size))
+        px = lambda x, y: tuple(rows[y][x * 3 : x * 3 + 3])
+        self.assertEqual(px(size // 2, int(size * 0.62)), (0xFF, 0xFF, 0xFF))
+        for x, y in ((4, 4), (size - 5, 4), (4, size - 5), (size - 5, size - 5)):
+            r, g, b = px(x, y)
+            self.assertGreater(b, r, f"angolo ({x},{y}) non azzurro: {(r, g, b)}")
 
     def test_angoli_non_trasparenti_ne_arrotondati_via_alpha(self):
         # Niente canale alpha (verificato altrove): qui controlliamo anche che

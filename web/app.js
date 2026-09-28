@@ -180,47 +180,33 @@ const pointerEngine = window.TeleMacPointer.createPointer({
 });
 window.addEventListener("devicemotion", (e) => pointerEngine.handleMotion(e));
 
-let pointerOn = false;
+// Il puntatore è sempre acceso. Su iOS il permesso al movimento si può chiedere
+// solo dentro un tocco: lo chiediamo al primo tocco qualsiasi, e se è già stato
+// concesso iOS risponde subito senza mostrare nulla.
+let pointerOn = true;
+let motionSeen = false;
+let motionAsked = false;
+pointerEngine.setEnabled(true);
+window.addEventListener("devicemotion", () => { motionSeen = true; }, { once: true });
 
-function setPointerOn(on) {
-  pointerOn = on;
-  pointerEngine.setEnabled(on);
-  const sw = $("#pointer-toggle");
-  sw.setAttribute("aria-checked", on ? "true" : "false");
-  $("#pad-center-label").textContent = on ? "" : "OK";
-}
-
-async function togglePointer() {
-  if (pointerOn) {
-    setPointerOn(false);
-    island.show({ text: "Puntatore disattivato", tone: "info", ms: 900 });
-    return;
-  }
+async function askMotionPermission() {
+  if (motionAsked) return;
+  motionAsked = true;
+  if (typeof DeviceMotionEvent === "undefined" || typeof DeviceMotionEvent.requestPermission !== "function") return;
   try {
-    if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
-      const result = await DeviceMotionEvent.requestPermission();
-      if (result !== "granted") {
-        setPointerOn(false);
-        island.show({ text: "Movimento non consentito: chiudi e riapri l'app e tocca Consenti", tone: "err", ms: 0 });
-        return;
-      }
-    }
-    setPointerOn(true);
-    if (pointerEngine.getAxes().detecting) {
-      island.show({ text: "Muovi il telefono su e giù per calibrarlo", tone: "info", ms: 3000 });
-    } else {
-      island.show({ text: "Puntatore attivo", tone: "ok", ms: 900 });
+    const result = await DeviceMotionEvent.requestPermission();
+    if (result !== "granted") {
+      island.show({ text: "Movimento non consentito: chiudi e riapri l'app e tocca Consenti", tone: "err", ms: 0 });
+      return;
     }
   } catch (e) {
-    setPointerOn(false);
-    island.show({ text: "Movimento non consentito: chiudi e riapri l'app e tocca Consenti", tone: "err", ms: 0 });
+    return;
+  }
+  if (pointerEngine.getAxes().detecting) {
+    island.show({ text: "Muovi il telefono su e giù per calibrarlo", tone: "info", ms: 3000 });
   }
 }
-
-$("#pointer-toggle").addEventListener("click", () => {
-  haptic();
-  togglePointer();
-});
+document.addEventListener("pointerdown", askMotionPermission, { capture: true });
 
 // Invia i movimenti accumulati una volta per fotogramma.
 (function pointerLoop() {
@@ -436,16 +422,18 @@ async function finishPairing(code) {
   }
 }
 
-/* ---------- Schede in basso ---------- */
+/* ---------- Pannelli Tastiera / Altro ---------- */
 
-$$(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    $$(".tab").forEach((t) => t.classList.remove("active"));
-    $$(".panel").forEach((p) => p.classList.remove("active"));
-    tab.classList.add("active");
-    $("#panel-" + tab.dataset.panel).classList.add("active");
-  });
-});
+function openSheet(id) {
+  const sheet = $("#" + id);
+  sheet.classList.add("open");
+  if (id === "panel-keyboard") textInput.focus({ preventScroll: true });
+}
+function closeSheets() {
+  $$(".sheet.open").forEach((sh) => sh.classList.remove("open"));
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
+$$(".sheet-done").forEach((btn) => btn.addEventListener("click", () => { haptic(); closeSheets(); }));
 
 /* ---------- Pulsanti "reattivi": azione su pointerdown, vibrazione ad ogni pressione ---------- */
 
@@ -488,7 +476,6 @@ function bindClick(el, action) {
 /* ---------- Clickpad ---------- */
 
 const clickpad = $("#clickpad");
-const padCenterLabel = $("#pad-center-label");
 let padActiveZone = null;
 let padHoldTimer = null;
 let padRepeatTimer = null;
@@ -515,14 +502,6 @@ function setGlow(dir, on) {
 
 function sendArrow(dir) { send({ type: "key", name: dir, mods: [] }); }
 
-function startArrowRepeat(dir) {
-  sendArrow(dir);
-  clearTimeout(padHoldTimer);
-  clearInterval(padRepeatTimer);
-  padHoldTimer = setTimeout(() => {
-    padRepeatTimer = setInterval(() => sendArrow(dir), 90);
-  }, 380);
-}
 function stopArrowRepeat() {
   clearTimeout(padHoldTimer);
   clearInterval(padRepeatTimer);
@@ -531,35 +510,86 @@ function stopArrowRepeat() {
 }
 
 function centerDown() {
-  if (pointerOn) {
-    pointerEngine.freeze(250);
-    clearInterval(centerFreezeRenew);
-    centerFreezeRenew = setInterval(() => pointerEngine.freeze(250), 100);
-    centerDragging = false;
-    centerHoldTimer = setTimeout(() => {
-      centerDragging = true;
-      clickpad.classList.add("dragging");
-      send({ type: "button", button: "left", down: true });
-    }, 350);
-  } else {
-    send({ type: "key", name: "return", mods: [] });
-  }
+  pointerEngine.freeze(250);
+  clearInterval(centerFreezeRenew);
+  centerFreezeRenew = setInterval(() => pointerEngine.freeze(250), 100);
+  centerDragging = false;
+  centerHoldTimer = setTimeout(() => {
+    centerDragging = true;
+    clickpad.classList.add("dragging");
+    send({ type: "button", button: "left", down: true });
+  }, 350);
 }
 function centerUp() {
   clearTimeout(centerHoldTimer);
   clearInterval(centerFreezeRenew);
   centerHoldTimer = null;
   centerFreezeRenew = null;
-  if (pointerOn) {
-    if (centerDragging) {
-      send({ type: "button", button: "left", down: false });
-    } else {
-      send({ type: "click", button: "left" });
-    }
-    centerDragging = false;
-    clickpad.classList.remove("dragging");
-    pointerEngine.freeze(120);
+  if (centerDragging) {
+    send({ type: "button", button: "left", down: false });
+  } else {
+    send({ type: "click", button: "left" });
   }
+  centerDragging = false;
+  clickpad.classList.remove("dragging");
+  pointerEngine.freeze(120);
+}
+
+/* Anello: un tocco = freccia, tenuto fermo = freccia ripetuta, dito che gira
+ * sull'anello = manopola del volume (orario alza, antiorario abbassa), come le
+ * radio. Finché non si capisce quale dei tre è, non si invia niente. */
+const KNOB_START_DEG = 25;  // rotazione che trasforma il tocco in manopola
+const KNOB_STEP_DEG = 18;   // un "click" di volume ogni tot gradi
+let ring = null;            // {zone, mode: "pending"|"repeat"|"knob", lastAngle, acc}
+
+function angleAt(clientX, clientY) {
+  const rect = clickpad.getBoundingClientRect();
+  return Math.atan2(clientY - (rect.top + rect.height / 2), clientX - (rect.left + rect.width / 2)) * 180 / Math.PI;
+}
+
+function volumeStep(dir) {
+  send({ type: "media", name: dir > 0 ? "volup" : "voldown" });
+  haptic();
+  island.show({ text: dir > 0 ? "Volume +" : "Volume −", tone: "info", ms: 900 });
+}
+
+function ringDown(zone, e) {
+  ring = { zone: zone, mode: "pending", lastAngle: angleAt(e.clientX, e.clientY), acc: 0 };
+  setGlow(zone, true);
+  padHoldTimer = setTimeout(() => {
+    if (!ring || ring.mode !== "pending") return;
+    ring.mode = "repeat";
+    sendArrow(ring.zone);
+    padRepeatTimer = setInterval(() => sendArrow(ring.zone), 90);
+  }, 380);
+}
+
+function ringMove(e) {
+  if (!ring || ring.mode === "repeat") return;
+  const angle = angleAt(e.clientX, e.clientY);
+  let delta = angle - ring.lastAngle;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  ring.lastAngle = angle;
+  ring.acc += delta;  // con l'asse y dello schermo verso il basso, positivo = senso orario
+  if (ring.mode === "pending") {
+    if (Math.abs(ring.acc) < KNOB_START_DEG) return;
+    ring.mode = "knob";
+    clearTimeout(padHoldTimer);
+    setGlow(ring.zone, false);
+    clickpad.classList.add("knob");
+  }
+  while (ring.acc >= KNOB_STEP_DEG) { volumeStep(+1); ring.acc -= KNOB_STEP_DEG; }
+  while (ring.acc <= -KNOB_STEP_DEG) { volumeStep(-1); ring.acc += KNOB_STEP_DEG; }
+}
+
+function ringUp() {
+  if (!ring) return;
+  if (ring.mode === "pending") sendArrow(ring.zone);
+  setGlow(ring.zone, false);
+  stopArrowRepeat();
+  clickpad.classList.remove("knob");
+  ring = null;
 }
 
 clickpad.addEventListener("pointerdown", (e) => {
@@ -572,9 +602,11 @@ clickpad.addEventListener("pointerdown", (e) => {
     clickpad.classList.add("pressed-center");
     centerDown();
   } else {
-    setGlow(zone, true);
-    startArrowRepeat(zone);
+    ringDown(zone, e);
   }
+});
+clickpad.addEventListener("pointermove", (e) => {
+  if (padActiveZone && padActiveZone !== "center") ringMove(e);
 });
 
 function releasePad() {
@@ -583,70 +615,31 @@ function releasePad() {
     clickpad.classList.remove("pressed-center");
     centerUp();
   } else {
-    setGlow(padActiveZone, false);
-    stopArrowRepeat();
+    ringUp();
   }
   padActiveZone = null;
 }
 clickpad.addEventListener("pointerup", releasePad);
 clickpad.addEventListener("pointercancel", releasePad);
 
-/* ---------- Striscia "Scorri" ---------- */
+/* ---------- Pulsanti in alto e voci di "Altro" ---------- */
 
-const scrollbarEl = $("#scrollbar");
-let scrollLastY = null;
-
-scrollbarEl.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  try { scrollbarEl.setPointerCapture(e.pointerId); } catch (err) { /* niente */ }
-  scrollLastY = e.clientY;
-  scrollbarEl.classList.add("active");
-  haptic();
-});
-scrollbarEl.addEventListener("pointermove", (e) => {
-  if (scrollLastY === null) return;
-  // deltaFingerY nel senso "normale" dello schermo: positivo quando il dito scende,
-  // negativo quando il dito sale. Verso naturale (come iOS): il dito sale -> il
-  // contenuto scorre su -> dy negativo. Con questa convenzione basta non invertire
-  // il segno: dy = deltaFingerY * 3.
-  const deltaFingerY = e.clientY - scrollLastY;
-  scrollLastY = e.clientY;
-  if (!deltaFingerY) return;
-  const dy = clamp(deltaFingerY * 3, -2000, 2000);
-  send({ type: "scroll", dx: 0, dy: dy });
-});
-function endScroll() {
-  scrollLastY = null;
-  scrollbarEl.classList.remove("active");
-}
-scrollbarEl.addEventListener("pointerup", endScroll);
-scrollbarEl.addEventListener("pointercancel", endScroll);
-
-/* ---------- Riga pulsanti del Telecomando ---------- */
-
-bindReactive($("#btn-back"), () => send({ type: "key", name: "escape", mods: [] }));
+bindReactive($("#btn-rightclick"), () => send({ type: "click", button: "right" }));
 bindReactive($("#btn-play"), () => {
   if (settings.playMode === "space") send({ type: "key", name: "space", mods: [] });
   else send({ type: "media", name: "play" });
 });
-bindReactive($("#btn-fullscreen"), () => send({ type: "key", name: "f", mods: [] }));
+bindClick($("#btn-keyboard"), () => openSheet("panel-keyboard"));
+bindClick($("#btn-more"), () => openSheet("panel-other"));
 
-bindReactive($("#btn-voldown"), () => {
-  send({ type: "media", name: "voldown" });
-  island.show({ text: "Volume −", tone: "info", ms: 900 });
-}, { repeat: true });
-bindReactive($("#btn-mute"), () => {
+bindClick($("#btn-back"), () => send({ type: "key", name: "escape", mods: [] }));
+bindClick($("#btn-fullscreen"), () => send({ type: "key", name: "f", mods: [] }));
+bindClick($("#btn-mute"), () => {
   send({ type: "media", name: "mute" });
   island.show({ text: "Muto", tone: "info", ms: 900 });
 });
-bindReactive($("#btn-volup"), () => {
-  send({ type: "media", name: "volup" });
-  island.show({ text: "Volume +", tone: "info", ms: 900 });
-}, { repeat: true });
-
-bindReactive($("#btn-rightclick"), () => send({ type: "click", button: "right" }));
-bindReactive($("#btn-prev"), () => send({ type: "media", name: "prev" }));
-bindReactive($("#btn-next"), () => send({ type: "media", name: "next" }));
+bindClick($("#btn-prev"), () => send({ type: "media", name: "prev" }));
+bindClick($("#btn-next"), () => send({ type: "media", name: "next" }));
 
 /* ---------- Tastiera ---------- */
 
@@ -920,5 +913,6 @@ window.TeleMacDebug = {
   getDemoText: () => demoText,
   pointerEngine: pointerEngine,
   isPointerOn: () => pointerOn,
+  hasMotion: () => motionSeen,
   getSendCount: () => debugSendCount,
 };
