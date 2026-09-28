@@ -195,6 +195,31 @@ final class ServerProcess {
     }
 }
 
+// MARK: - Maniglia della finestra
+
+// La barra del titolo è trasparente e la pagina ci passa sotto: senza questa
+// fascia invisibile il clic finirebbe alla pagina e la finestra non si
+// sposterebbe. Sta sopra la pagina, nei 40 punti in alto (vuoti nel pannello).
+final class DragBar: NSView {
+    override var mouseDownCanMoveWindow: Bool { true }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            // Doppio clic: come la barra del titolo, secondo le Impostazioni di Sistema.
+            let action = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
+            if action == "Minimize" {
+                window?.performMiniaturize(nil)
+            } else if action != "None" {
+                window?.performZoom(nil)
+            }
+            return
+        }
+        window?.performDrag(with: event)
+    }
+}
+
 // MARK: - App
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler,
@@ -289,6 +314,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         window.contentView!.addSubview(webView)
+
+        let barHeight: CGFloat = 40
+        let bounds = window.contentView!.bounds
+        let dragBar = DragBar(frame: NSRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight))
+        dragBar.autoresizingMask = [.width, .minYMargin]
+        window.contentView!.addSubview(dragBar, positioned: .above, relativeTo: webView)
     }
 
     func showWindow() {
