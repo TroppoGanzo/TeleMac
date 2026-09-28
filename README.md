@@ -33,7 +33,14 @@ iPhone (app nella schermata Home)  ──Wi-Fi di casa, HTTPS──▶  Mac (ser
 
 1. Scarica il progetto: *Code → Download ZIP* e scompatta la cartella dove vuoi.
 2. Fai doppio clic su **`TeleMac.command`**.
-   - Se macOS dice che non può aprirlo: tasto destro sul file → *Apri* → *Apri*.
+   - Se macOS dice che potrebbe contenere malware e non lo apre: è il controllo di
+     sicurezza (Gatekeeper) sui file scaricati da internet che non sono firmati
+     tramite il programma sviluppatori Apple (a pagamento). Chiudi l'avviso con
+     *Fine*, poi vai su *Impostazioni di Sistema → Privacy e sicurezza*: in fondo
+     alla pagina tocca **Apri comunque**. Si fa una volta sola.
+   - In alternativa, senza sbloccare niente: apri il Terminale, scrivi `cd `
+     (con lo spazio), trascina la cartella TeleMac nella finestra, premi Invio e poi
+     lancia `python3 telemac/server.py`.
    - La prima volta macOS potrebbe proporti di installare gli "strumenti per sviluppatori"
      (è il pacchetto che contiene Python): accetta e rilancia il file.
 3. macOS chiede il permesso di **Accessibilità**. Apri *Impostazioni di Sistema → Privacy e
