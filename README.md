@@ -77,16 +77,19 @@ Terminale da tenere aperta.
 
 **Telecomando**, fatto come quello dell'Apple TV:
 
-- **Puntatore sempre attivo**: muovi il telefono e il cursore lo segue, sia tenendolo
-  piatto sia dritto. Al primo tocco iOS chiede il permesso al movimento: rispondi
-  *Consenti* una volta.
+- **Puntatore**: muovi il telefono e il cursore lo segue, sia tenendolo piatto sia
+  dritto. Il **pulsante d'accensione** in alto a destra lo accende e spegne (verde =
+  acceso) e si ricorda lo stato. La prima volta iOS chiede il permesso al movimento:
+  rispondi *Consenti*.
 - **Cerchio in basso**, alla portata del pollice:
   - **centro** = clic; tenendo premuto trascini. Mentre il dito è sul centro il
-    cursore si ferma, così il clic arriva dove miravi;
+    cursore si ferma, così il clic arriva dove miravi. A puntatore spento il centro
+    è *OK* (Invio);
   - **frecce** = frecce della tastiera: nei video vai avanti/indietro, nelle pagine
-    scorri. Tenendole premute si ripetono;
-  - **manopola del volume**: appoggia il dito sull'anello e giralo come la manopola
-    di una radio, in senso orario alzi, in senso antiorario abbassi.
+    scorri. Si illumina solo quella che tocchi;
+  - **manopola del volume**: tieni il dito fermo sull'anello per un attimo. Il cerchio
+    si trasforma e compare un puntino che segue il dito. Gira come la manopola di
+    una radio: in senso orario alzi, in senso antiorario abbassi.
 - **In alto quattro tasti**: Clic destro, Play/Pausa, Tastiera, Altro.
 
 **Tastiera**

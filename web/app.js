@@ -28,7 +28,7 @@ function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
 const SETTINGS_KEY = "telemac-settings";
 const TOKEN_KEY = "telemac-token";
-const DEFAULT_SETTINGS = { sensitivity: 20, invertX: false, invertY: false, playMode: "media", vibration: true };
+const DEFAULT_SETTINGS = { pointerOn: true, sensitivity: 20, invertX: false, invertY: false, playMode: "media", vibration: true };
 
 function loadSettings() {
   try {
@@ -180,33 +180,54 @@ const pointerEngine = window.TeleMacPointer.createPointer({
 });
 window.addEventListener("devicemotion", (e) => pointerEngine.handleMotion(e));
 
-// Il puntatore è sempre acceso. Su iOS il permesso al movimento si può chiedere
-// solo dentro un tocco: lo chiediamo al primo tocco qualsiasi, e se è già stato
-// concesso iOS risponde subito senza mostrare nulla.
-let pointerOn = true;
+// Il pulsante d'accensione in alto accende/spegne il giroscopio (e se lo ricorda).
+// Su iOS il permesso al movimento si può chiedere solo dentro un tocco: lo
+// chiediamo quando si accende, oppure al primo tocco se era già acceso.
+let pointerOn = settings.pointerOn !== false;
 let motionSeen = false;
-let motionAsked = false;
-pointerEngine.setEnabled(true);
+let motionGranted = false;
 window.addEventListener("devicemotion", () => { motionSeen = true; }, { once: true });
 
 async function askMotionPermission() {
-  if (motionAsked) return;
-  motionAsked = true;
-  if (typeof DeviceMotionEvent === "undefined" || typeof DeviceMotionEvent.requestPermission !== "function") return;
-  try {
-    const result = await DeviceMotionEvent.requestPermission();
-    if (result !== "granted") {
-      island.show({ text: "Movimento non consentito: chiudi e riapri l'app e tocca Consenti", tone: "err", ms: 0 });
-      return;
-    }
-  } catch (e) {
-    return;
+  if (motionGranted) return true;
+  if (typeof DeviceMotionEvent === "undefined" || typeof DeviceMotionEvent.requestPermission !== "function") {
+    motionGranted = true;
+    return true;
   }
-  if (pointerEngine.getAxes().detecting) {
+  try {
+    motionGranted = (await DeviceMotionEvent.requestPermission()) === "granted";
+  } catch (e) {
+    motionGranted = false;
+  }
+  if (!motionGranted) {
+    island.show({ text: "Movimento non consentito: chiudi e riapri l'app e tocca Consenti", tone: "err", ms: 0 });
+  } else if (pointerEngine.getAxes().detecting) {
     island.show({ text: "Muovi il telefono su e giù per calibrarlo", tone: "info", ms: 3000 });
   }
+  return motionGranted;
 }
-document.addEventListener("pointerdown", askMotionPermission, { capture: true });
+
+function setPointerOn(on) {
+  pointerOn = on;
+  settings.pointerOn = on;
+  saveSettings();
+  pointerEngine.setEnabled(on);
+  $("#btn-power").setAttribute("aria-checked", on ? "true" : "false");
+  clickpad.classList.toggle("pointer-off", !on);
+}
+
+async function togglePointer() {
+  if (pointerOn) {
+    setPointerOn(false);
+    island.show({ text: "Puntatore spento", tone: "info", ms: 900 });
+    return;
+  }
+  setPointerOn(true);
+  if (await askMotionPermission()) island.show({ text: "Puntatore acceso", tone: "ok", ms: 900 });
+  else setPointerOn(false);
+}
+
+document.addEventListener("pointerdown", () => { if (pointerOn) askMotionPermission(); }, { capture: true, once: true });
 
 // Invia i movimenti accumulati una volta per fotogramma.
 (function pointerLoop() {
@@ -478,7 +499,6 @@ function bindClick(el, action) {
 const clickpad = $("#clickpad");
 let padActiveZone = null;
 let padHoldTimer = null;
-let padRepeatTimer = null;
 let centerHoldTimer = null;
 let centerFreezeRenew = null;
 let centerDragging = false;
@@ -502,14 +522,9 @@ function setGlow(dir, on) {
 
 function sendArrow(dir) { send({ type: "key", name: dir, mods: [] }); }
 
-function stopArrowRepeat() {
-  clearTimeout(padHoldTimer);
-  clearInterval(padRepeatTimer);
-  padHoldTimer = null;
-  padRepeatTimer = null;
-}
 
 function centerDown() {
+  if (!pointerOn) return;  // a puntatore spento il centro è "OK": si invia al rilascio
   pointerEngine.freeze(250);
   clearInterval(centerFreezeRenew);
   centerFreezeRenew = setInterval(() => pointerEngine.freeze(250), 100);
@@ -521,6 +536,10 @@ function centerDown() {
   }, 350);
 }
 function centerUp() {
+  if (!pointerOn) {
+    send({ type: "key", name: "return", mods: [] });
+    return;
+  }
   clearTimeout(centerHoldTimer);
   clearInterval(centerFreezeRenew);
   centerHoldTimer = null;
@@ -535,37 +554,57 @@ function centerUp() {
   pointerEngine.freeze(120);
 }
 
-/* Anello: un tocco = freccia, tenuto fermo = freccia ripetuta, dito che gira
- * sull'anello = manopola del volume (orario alza, antiorario abbassa), come le
- * radio. Finché non si capisce quale dei tre è, non si invia niente. */
-const KNOB_START_DEG = 25;  // rotazione che trasforma il tocco in manopola
-const KNOB_STEP_DEG = 18;   // un "click" di volume ogni tot gradi
-let ring = null;            // {zone, mode: "pending"|"repeat"|"knob", lastAngle, acc}
+/* Anello: un tocco = freccia. Tenendo il dito fermo per un attimo (o
+ * cominciando subito a girare) il cerchio diventa la manopola del volume: le
+ * frecce spariscono, un puntino segue il dito e ogni scatto alza (senso
+ * orario) o abbassa (antiorario) il volume, come la manopola di una radio.
+ * Finché non si capisce quale dei due è, non si invia niente. */
+const KNOB_HOLD_MS = 350;   // dito fermo sull'anello: diventa manopola
+const KNOB_START_DEG = 25;  // oppure: rotazione che la attiva subito
+const KNOB_STEP_DEG = 18;   // uno scatto di volume ogni tot gradi
+let ring = null;            // {zone, mode: "pending"|"knob", lastAngle, acc}
+const knobArm = $("#knob-dot-arm");
+const knobSign = $("#knob-sign");
 
 function angleAt(clientX, clientY) {
   const rect = clickpad.getBoundingClientRect();
   return Math.atan2(clientY - (rect.top + rect.height / 2), clientX - (rect.left + rect.width / 2)) * 180 / Math.PI;
 }
 
+function placeKnobDot(angle) {
+  // atan2 misura da destra in senso orario; il braccio CSS parte da "ore 12"
+  knobArm.style.transform = "rotate(" + (angle + 90) + "deg)";
+}
+
 function volumeStep(dir) {
   send({ type: "media", name: dir > 0 ? "volup" : "voldown" });
   haptic();
+  knobSign.textContent = dir > 0 ? "+" : "−";
+  knobSign.classList.remove("pop");
+  void knobSign.offsetWidth;  // riavvia l'animazione
+  knobSign.classList.add("pop");
   island.show({ text: dir > 0 ? "Volume +" : "Volume −", tone: "info", ms: 900 });
+}
+
+function enterKnob() {
+  if (!ring || ring.mode === "knob") return;
+  ring.mode = "knob";
+  clearTimeout(padHoldTimer);
+  setGlow(ring.zone, false);
+  knobSign.textContent = "±";
+  placeKnobDot(ring.lastAngle);
+  clickpad.classList.add("knob");
+  haptic();
 }
 
 function ringDown(zone, e) {
   ring = { zone: zone, mode: "pending", lastAngle: angleAt(e.clientX, e.clientY), acc: 0 };
   setGlow(zone, true);
-  padHoldTimer = setTimeout(() => {
-    if (!ring || ring.mode !== "pending") return;
-    ring.mode = "repeat";
-    sendArrow(ring.zone);
-    padRepeatTimer = setInterval(() => sendArrow(ring.zone), 90);
-  }, 380);
+  padHoldTimer = setTimeout(enterKnob, KNOB_HOLD_MS);
 }
 
 function ringMove(e) {
-  if (!ring || ring.mode === "repeat") return;
+  if (!ring) return;
   const angle = angleAt(e.clientX, e.clientY);
   let delta = angle - ring.lastAngle;
   if (delta > 180) delta -= 360;
@@ -574,20 +613,18 @@ function ringMove(e) {
   ring.acc += delta;  // con l'asse y dello schermo verso il basso, positivo = senso orario
   if (ring.mode === "pending") {
     if (Math.abs(ring.acc) < KNOB_START_DEG) return;
-    ring.mode = "knob";
-    clearTimeout(padHoldTimer);
-    setGlow(ring.zone, false);
-    clickpad.classList.add("knob");
+    enterKnob();
   }
+  placeKnobDot(angle);
   while (ring.acc >= KNOB_STEP_DEG) { volumeStep(+1); ring.acc -= KNOB_STEP_DEG; }
   while (ring.acc <= -KNOB_STEP_DEG) { volumeStep(-1); ring.acc += KNOB_STEP_DEG; }
 }
 
 function ringUp() {
   if (!ring) return;
+  clearTimeout(padHoldTimer);
   if (ring.mode === "pending") sendArrow(ring.zone);
   setGlow(ring.zone, false);
-  stopArrowRepeat();
   clickpad.classList.remove("knob");
   ring = null;
 }
@@ -624,6 +661,8 @@ clickpad.addEventListener("pointercancel", releasePad);
 
 /* ---------- Pulsanti in alto e voci di "Altro" ---------- */
 
+bindClick($("#btn-power"), togglePointer);
+setPointerOn(pointerOn);
 bindReactive($("#btn-rightclick"), () => send({ type: "click", button: "right" }));
 bindReactive($("#btn-play"), () => {
   if (settings.playMode === "space") send({ type: "key", name: "space", mods: [] });
@@ -741,12 +780,8 @@ $("#btn-forget").addEventListener("click", () => {
 /* ---------- Modalità demo (per GitHub Pages) ---------- */
 
 let demoCursor = { x: 960, y: 540 };
-let demoTrail = [];
-let demoClicks = [];
 let demoDragging = false;
-let demoDragTrail = [];
 let demoText = "";
-let demoCanvas, demoCtx;
 
 const KEY_LABEL = {
   return: "Invio", escape: "Esc", tab: "Tab", backspace: "Cancella", space: "Spazio",
@@ -762,8 +797,9 @@ function describeKey(obj) {
   return (mods ? mods + " " : "") + label;
 }
 
+// In demo non c'è un Mac: l'azione che sarebbe arrivata si vede nella pillola in alto.
 function demoSetAction(text) {
-  $("#demo-caption").textContent = text;
+  island.show({ text: text, tone: "info", ms: 900 });
 }
 
 function demoBackspaceChar() {
@@ -780,26 +816,15 @@ function demoHandle(obj) {
   if (obj.type === "move") {
     demoCursor.x = clamp(demoCursor.x + obj.dx, 0, 1920);
     demoCursor.y = clamp(demoCursor.y + obj.dy, 0, 1080);
-    demoTrail.push({ x: demoCursor.x, y: demoCursor.y });
-    if (demoTrail.length > 16) demoTrail.shift();
-    if (demoDragging) {
-      demoDragTrail.push({ x: demoCursor.x, y: demoCursor.y });
-      if (demoDragTrail.length > 200) demoDragTrail.shift();
-    }
   } else if (obj.type === "click") {
-    const color = obj.button === "right" ? "#ff453a" : "#0a84ff";
-    demoClicks.push({ x: demoCursor.x, y: demoCursor.y, color: color, start: performance.now() });
     demoSetAction(obj.button === "right" ? "Clic destro" : "Clic sinistro");
   } else if (obj.type === "button") {
     if (obj.button === "left" && obj.down) {
       demoDragging = true;
-      demoDragTrail = [{ x: demoCursor.x, y: demoCursor.y }];
       demoSetAction("Trascinamento…");
     } else if (obj.button === "left" && !obj.down) {
       demoDragging = false;
-      demoClicks.push({ x: demoCursor.x, y: demoCursor.y, color: "#0a84ff", start: performance.now() });
       demoSetAction("Fine trascinamento");
-      demoDragTrail = [];
     }
   } else if (obj.type === "scroll") {
     demoSetAction("Scorri");
@@ -818,87 +843,9 @@ function demoHandle(obj) {
   }
 }
 
-function demoScale() {
-  const rect = demoCanvas.getBoundingClientRect();
-  return rect.width / 1920 || 1;
-}
-
-function resizeDemoCanvas() {
-  if (!demoCanvas) return;
-  const rect = demoCanvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  demoCanvas.width = Math.max(1, Math.round(rect.width * dpr));
-  demoCanvas.height = Math.max(1, Math.round(rect.height * dpr));
-  demoCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function drawDemo() {
-  const rect = demoCanvas.getBoundingClientRect();
-  const w = rect.width, h = rect.height;
-  const scale = demoScale();
-  demoCtx.clearRect(0, 0, w, h);
-  demoCtx.fillStyle = "#0b0b0c";
-  demoCtx.fillRect(0, 0, w, h);
-
-  // scia che sfuma
-  demoTrail.forEach((p, i) => {
-    const alpha = ((i + 1) / demoTrail.length) * 0.3;
-    demoCtx.beginPath();
-    demoCtx.fillStyle = "rgba(255,255,255," + alpha.toFixed(3) + ")";
-    demoCtx.arc(p.x * scale, p.y * scale, 3, 0, Math.PI * 2);
-    demoCtx.fill();
-  });
-
-  // scia gialla durante il trascinamento
-  if (demoDragTrail.length > 1) {
-    demoCtx.beginPath();
-    demoCtx.strokeStyle = "rgba(255,214,10,.85)";
-    demoCtx.lineWidth = 2;
-    demoDragTrail.forEach((p, i) => {
-      const x = p.x * scale, y = p.y * scale;
-      if (i === 0) demoCtx.moveTo(x, y); else demoCtx.lineTo(x, y);
-    });
-    demoCtx.stroke();
-  }
-
-  // cerchi dei clic, che si allargano e svaniscono
-  const now = performance.now();
-  demoClicks = demoClicks.filter((c) => now - c.start < 500);
-  demoClicks.forEach((c) => {
-    const t = (now - c.start) / 500;
-    demoCtx.beginPath();
-    demoCtx.strokeStyle = c.color;
-    demoCtx.globalAlpha = 1 - t;
-    demoCtx.lineWidth = 2;
-    demoCtx.arc(c.x * scale, c.y * scale, 6 + t * 18, 0, Math.PI * 2);
-    demoCtx.stroke();
-    demoCtx.globalAlpha = 1;
-  });
-
-  // cursore
-  demoCtx.beginPath();
-  demoCtx.fillStyle = "#fff";
-  demoCtx.arc(demoCursor.x * scale, demoCursor.y * scale, 6, 0, Math.PI * 2);
-  demoCtx.fill();
-  demoCtx.lineWidth = 1.5;
-  demoCtx.strokeStyle = "rgba(0,0,0,.5)";
-  demoCtx.stroke();
-}
-
-function demoLoop() {
-  drawDemo();
-  requestAnimationFrame(demoLoop);
-}
-
 if (demoMode) {
   document.body.classList.add("demo-mode");
-  demoCanvas = $("#demo-canvas");
-  demoCtx = demoCanvas.getContext("2d");
-  $("#demo-screen").hidden = false;
   $("#demo-keyboard-wrap").hidden = false;
-  resizeDemoCanvas();
-  window.addEventListener("resize", resizeDemoCanvas);
-  requestAnimationFrame(demoLoop);
   island.show({ text: "Modalità demo", tone: "info", ms: 2500 });
 } else if (!getToken()) {
   showPairing();

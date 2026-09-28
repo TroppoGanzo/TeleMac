@@ -40,11 +40,10 @@
 
   <section id="panel-remote" class="panel active" data-panel="remote">
 
-    <div id="demo-screen" class="demo-screen" hidden>
-      <div class="demo-canvas-wrap">
-        <canvas id="demo-canvas"></canvas>
-      </div>
-      <p id="demo-caption" class="demo-caption"></p>
+    <div class="remote-header">
+      <button id="btn-power" class="power-btn" type="button" role="switch" aria-checked="true" aria-label="Puntatore a giroscopio">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.6 6.6a8 8 0 1010.8 0"/></svg>
+      </button>
     </div>
 
     <div class="top-buttons">
@@ -68,7 +67,7 @@
 
     <div class="remote-spacer"></div>
 
-    <p id="pad-hint" class="pad-hint">Muovi il telefono per spostare il cursore · gira sull'anello per il volume</p>
+    <p id="pad-hint" class="pad-hint">Tieni il dito sull'anello e giralo per il volume</p>
 
     <div class="pad-row">
       <div id="clickpad" class="clickpad">
@@ -83,6 +82,14 @@
         <div class="pad-zone pad-right"><svg class="icon" viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></div>
 
         <div class="pad-center"></div>
+
+        <div class="knob-face" aria-hidden="true">
+          <div id="knob-dot-arm" class="knob-dot-arm"><span class="knob-dot"></span></div>
+          <div class="knob-center">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M4 10v4h3.4l4.4 3.8a.5.5 0 00.8-.4V6.6a.5.5 0 00-.8-.4L7.4 10H4z" fill="currentColor" stroke="none"/><path d="M16 8.5a5.2 5.2 0 010 7"/><path d="M18.6 6a9 9 0 010 12"/></svg>
+            <span id="knob-sign" class="knob-sign">±</span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
