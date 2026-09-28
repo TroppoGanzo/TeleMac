@@ -812,6 +812,67 @@ $("#btn-forget").addEventListener("click", () => {
   showPairing();
 });
 
+/* ---------- Il telecomando entra sempre nello schermo ---------- */
+
+// Misure "ideali" del telecomando; se lo schermo è basso (iPhone SE, Safari con
+// le barre) accorciamo prima gli spazi, poi il cerchio, poi i tasti rotondi,
+// così niente finisce mai sotto il bordo.
+const FIT = { pad: 320, padMin: 196, btn: 82, btnMin: 60, padGap: 22, padGapMin: 12, btnGap: 16, btnGapMin: 8 };
+const remotePanel = $("#panel-remote");
+
+function fitRemote() {
+  const root = document.documentElement.style;
+  let pad = Math.min(window.innerWidth * 0.82, FIT.pad);
+  let btn = FIT.btn;
+  let padGap = FIT.padGap;
+  let btnGap = FIT.btnGap;
+  function apply() {
+    root.setProperty("--pad-fit", Math.round(pad) + "px");
+    root.setProperty("--btn-size", Math.round(btn) + "px");
+    root.setProperty("--pad-gap", Math.round(padGap) + "px");
+    root.setProperty("--btn-gap", Math.round(btnGap) + "px");
+  }
+  apply();
+  for (let i = 0; i < 4; i++) {
+    let over = remotePanel.scrollHeight - remotePanel.clientHeight;
+    if (over <= 0) return;
+    const gaps = Math.min(over, (padGap - FIT.padGapMin) + (btnGap - FIT.btnGapMin));
+    const share = gaps / ((padGap - FIT.padGapMin) + (btnGap - FIT.btnGapMin) || 1);
+    padGap -= (padGap - FIT.padGapMin) * share;
+    btnGap -= (btnGap - FIT.btnGapMin) * share;
+    over -= gaps;
+    const padCut = Math.min(over, pad - FIT.padMin);
+    pad -= padCut;
+    over -= padCut;
+    if (over > 0) btn = Math.max(FIT.btnMin, btn - over / 2);  // due file di tasti
+    apply();
+  }
+}
+
+// iOS, quando si chiude la tastiera, a volte lascia la pagina spostata verso
+// l'alto: il telecomando resterebbe più su di dove deve stare. La riportiamo a
+// posto appena nessun campo di testo è attivo.
+function textFieldFocused() {
+  const a = document.activeElement;
+  return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
+}
+function resetViewport() {
+  if (textFieldFocused()) return;
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  if (document.scrollingElement && document.scrollingElement.scrollTop) document.scrollingElement.scrollTop = 0;
+}
+function relayout() {
+  resetViewport();
+  fitRemote();
+}
+document.addEventListener("focusout", () => { setTimeout(relayout, 60); setTimeout(relayout, 400); });
+window.addEventListener("scroll", resetViewport, { passive: true });
+window.addEventListener("resize", relayout);
+window.addEventListener("orientationchange", () => setTimeout(relayout, 250));
+window.addEventListener("pageshow", relayout);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", relayout);
+fitRemote();
+
 /* ---------- Modalità demo (per GitHub Pages) ---------- */
 
 let demoCursor = { x: 960, y: 540 };

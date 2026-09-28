@@ -11,9 +11,9 @@
     --surface: #0b2331;
     --surface-2: #133247;
     --surface-3: #1f4a63;
-    --text: #eaf8fe;
-    --text-2: #86a8ba;
-    --text-3: #4b6b7d;
+    --text: #f3f6f8;
+    --text-2: #9eadb7;
+    --text-3: #566975;
     --accent: #1ab8ef;
     --accent-rgb: 26, 184, 239;
     --accent-press: #0f9ad0;
@@ -22,8 +22,18 @@
     --green-rgb: 61, 220, 151;
     --red: #ff5c6c;
     --yellow: #ffd24a;
+    /* Finiture argento, le stesse dell'app per iPhone. */
+    --silver: #e4eaee;
+    --silver-2: #b7c3cb;
+    --hairline: rgba(206, 222, 232, .13);
+    --hairline-strong: rgba(222, 234, 241, .24);
+    --line: 1px;
+    --sheen: inset 0 1px 0 rgba(255, 255, 255, .08);
+    --surface-grad: linear-gradient(180deg, #11303f 0%, #0a2230 100%);
+    --metal-ring: conic-gradient(from 210deg, #f7fafc, #8d9ca6 18%, #e3e9ed 34%, #6c7c86 52%, #f1f5f7 70%, #93a2ac 86%, #f7fafc);
     color-scheme: dark;
   }
+  @media (min-resolution: 2dppx) { :root { --line: 0.5px; } }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   html, body { margin: 0; }
@@ -43,14 +53,15 @@
 
   /* ---- intestazione ---- */
   header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-  header img { width: 46px; height: 46px; border-radius: 11px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  header img { width: 46px; height: 46px; border-radius: 11px; box-shadow: 0 0 0 var(--line) var(--hairline-strong), 0 4px 14px rgba(0,0,0,.35); }
   .title { flex: 1; min-width: 0; }
   .title h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
   .title p { margin: 1px 0 0; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pill {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 5px 10px; border-radius: 999px;
-    background: var(--surface); color: var(--text-2);
+    background: var(--surface-grad); color: var(--text-2);
+    border: var(--line) solid var(--hairline-strong); box-shadow: var(--sheen);
     font-size: 12px; font-weight: 600; white-space: nowrap;
   }
   .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
@@ -67,7 +78,8 @@
   /* ---- scheda principale: QR / codice / abbinato ---- */
   .hero {
     background: linear-gradient(180deg, #0e2b3d, var(--surface));
-    border: 1px solid rgba(var(--accent-rgb), .18);
+    border: var(--line) solid var(--hairline-strong);
+    box-shadow: var(--sheen), 0 18px 40px -22px rgba(0, 0, 0, .8);
     border-radius: 20px;
     padding: 22px 20px 20px;
     text-align: center;
@@ -76,14 +88,18 @@
   .qr {
     width: 208px; height: 208px; margin: 0 auto 16px;
     background: #fff; border-radius: 16px; padding: 8px;
-    box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .25), 0 10px 30px rgba(0,0,0,.35);
+    /* cornice sottile di metallo attorno al QR */
+    border: 1px solid transparent;
+    background: linear-gradient(#fff, #fff) padding-box, var(--metal-ring) border-box;
+    box-shadow: 0 0 0 5px rgba(255, 255, 255, .04), 0 10px 30px rgba(0,0,0,.35);
   }
   .qr svg { width: 100%; height: 100%; display: block; }
   .hero h2 { margin: 0 0 4px; font-size: 16px; font-weight: 650; }
   .hero .sub { margin: 0; color: var(--text-2); }
   .url {
     display: inline-block; margin-top: 10px; padding: 4px 10px; border-radius: 8px;
-    background: rgba(var(--accent-rgb), .1); color: var(--accent);
+    background: rgba(var(--accent-rgb), .08); color: var(--accent);
+    border: var(--line) solid rgba(var(--accent-rgb), .25);
     font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
     -webkit-user-select: text; user-select: text;
   }
@@ -97,7 +113,8 @@
     text-shadow: 0 0 28px rgba(var(--accent-rgb), .55);
   }
   .code span { color: var(--accent); }
-  .bar { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin: 0 30px 8px; }
+  .code { color: var(--silver); }
+  .bar { height: 4px; border-radius: 2px; background: var(--surface-3); box-shadow: inset 0 0 0 var(--line) var(--hairline); overflow: hidden; margin: 0 30px 8px; }
   .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 1s linear; }
   .done-icon {
     width: 64px; height: 64px; margin: 6px auto 14px; border-radius: 50%;
@@ -121,7 +138,8 @@
   .steps li { display: flex; gap: 12px; align-items: flex-start; padding: 7px 4px; }
   .steps b {
     flex: none; width: 22px; height: 22px; border-radius: 50%;
-    background: rgba(var(--accent-rgb), .16); color: var(--accent);
+    background: var(--surface-grad); color: var(--silver);
+    border: var(--line) solid var(--hairline-strong); box-shadow: var(--sheen);
     display: flex; align-items: center; justify-content: center; font-size: 12px;
   }
   .steps span { color: var(--text-2); padding-top: 2px; }
@@ -129,30 +147,31 @@
 
   /* ---- elenco impostazioni ---- */
   .group-title { color: var(--text-2); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; margin: 0 0 8px 4px; }
-  .list { background: var(--surface); border-radius: 14px; overflow: hidden; margin-bottom: 18px; }
+  .list { background: var(--surface); border: var(--line) solid var(--hairline); box-shadow: var(--sheen); border-radius: 14px; overflow: hidden; margin-bottom: 18px; }
   .row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; min-height: 52px; }
-  .row + .row { border-top: 1px solid rgba(var(--accent-rgb), .09); }
+  .row + .row { border-top: var(--line) solid var(--hairline); }
   .row-icon {
     flex: none; width: 28px; height: 28px; border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(var(--accent-rgb), .15); color: var(--accent);
+    background: var(--surface-grad); color: var(--silver);
+    border: var(--line) solid var(--hairline-strong); box-shadow: var(--sheen);
   }
-  .row-icon svg { width: 17px; height: 17px; }
+  .row-icon svg { width: 16px; height: 16px; }
   .row-text { flex: 1; min-width: 0; }
   .row-text div { font-size: 13.5px; font-weight: 550; }
   .row-text small { display: block; color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
   .ok { color: var(--green); }
   .warn { color: var(--yellow); }
-  svg.i { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  svg.i { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
   button {
     font: inherit; font-size: 12.5px; font-weight: 600;
-    border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer;
-    background: var(--surface-2); color: var(--text);
+    border: var(--line) solid var(--hairline-strong); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+    background: var(--surface-grad); color: var(--text); box-shadow: var(--sheen);
     white-space: nowrap;
   }
   button:hover { background: var(--surface-3); }
-  button.primary { background: var(--accent); color: var(--accent-ink); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35); }
   button.primary:hover { background: var(--accent-press); }
   button.danger { color: var(--red); }
   button.danger.armed { background: var(--red); color: #2b0006; }
@@ -165,13 +184,17 @@
   .switch:hover { background: var(--surface-3); }
   .switch::after {
     content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
-    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform 150ms ease;
+    background: linear-gradient(180deg, #ffffff, #e3e9ed); box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform 150ms ease;
   }
   .switch[aria-checked="true"], .switch[aria-checked="true"]:hover { background: var(--accent); }
   .switch[aria-checked="true"]::after { transform: translateX(16px); }
 
   footer { text-align: center; color: var(--text-3); font-size: 11.5px; padding: 4px 0 6px; line-height: 1.6; }
-  footer strong { color: var(--text-2); font-weight: 600; }
+  footer strong { color: var(--silver-2); font-weight: 600; }
+  footer::before {
+    content: ""; display: block; height: var(--line); margin: 0 auto 12px; width: 120px;
+    background: linear-gradient(90deg, transparent, var(--hairline-strong), transparent);
+  }
 </style>
 </head>
 <body>

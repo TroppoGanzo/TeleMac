@@ -10,8 +10,8 @@
     --bg: #03111a;
     --surface: #0b2331;
     --surface-2: #133247;
-    --text: #eaf8fe;
-    --text-2: #86a8ba;
+    --text: #f3f6f8;
+    --text-2: #9eadb7;
     --text-3: #4b6b7d;
     --accent: #1ab8ef;
     --accent-press: #0f9ad0;
@@ -19,8 +19,13 @@
     --green: #3ddc97;
     --red: #ff5c6c;
     --yellow: #ffd24a;
+    --hairline: rgba(206, 222, 232, .13);
+    --hairline-strong: rgba(222, 234, 241, .24);
+    --line: 1px;
+    --sheen: inset 0 1px 0 rgba(255, 255, 255, .08);
     color-scheme: dark;
   }
+  @media (min-resolution: 2dppx) { :root { --line: 0.5px; } }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   [hidden] { display: none !important; }
   html, body { margin: 0; overflow-x: hidden; }
@@ -52,6 +57,8 @@
     height: 30px;
     border-radius: 50%;
     background: var(--surface-2);
+    border: var(--line) solid var(--hairline-strong);
+    box-shadow: var(--sheen);
     color: var(--text);
     display: flex;
     align-items: center;
@@ -76,6 +83,7 @@
     font-weight: 600;
     text-decoration: none;
     border: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35);
     font-family: inherit;
   }
   .btn:active { background: var(--accent-press); }
@@ -90,6 +98,7 @@
     color: var(--text-2);
     word-break: break-all;
     background: var(--surface);
+    border: var(--line) solid var(--hairline);
     border-radius: 10px;
     padding: 8px 10px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -99,6 +108,7 @@
     font-size: 12.5px;
     color: var(--text-2);
     background: var(--surface);
+    border: var(--line) solid var(--hairline);
     border-radius: 10px;
     padding: 10px 12px;
     line-height: 1.4;

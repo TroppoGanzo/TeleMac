@@ -5,9 +5,9 @@
   --surface: #0b2331;
   --surface-2: #133247;
   --surface-3: #1f4a63;
-  --text: #eaf8fe;
-  --text-2: #86a8ba;
-  --text-3: #4b6b7d;
+  --text: #f3f6f8;
+  --text-2: #9eadb7;
+  --text-3: #566975;
   --accent: #1ab8ef;
   --accent-rgb: 26, 184, 239;
   --accent-press: #0f9ad0;
@@ -17,11 +17,28 @@
   --green-rgb: 61, 220, 151;
   --red: #ff5c6c;
   --yellow: #ffd24a;
+
+  /* Finiture "argento": linee sottili tutte uguali, bordi e riflessi. Ogni
+     bordo dell'app usa --line + --hairline, così lo spessore è coerente. */
+  --silver: #e4eaee;
+  --silver-2: #b7c3cb;
+  --silver-3: #7d8d97;
+  --hairline: rgba(206, 222, 232, .13);
+  --hairline-strong: rgba(222, 234, 241, .24);
+  --line: 1px;
+  --sheen: inset 0 1px 0 rgba(255, 255, 255, .08);
+  --lift: 0 8px 20px -8px rgba(0, 0, 0, .55);
+  --surface-grad: linear-gradient(180deg, #11303f 0%, #0a2230 100%);
+  --metal-ring: conic-gradient(from 210deg, #f7fafc, #8d9ca6 18%, #e3e9ed 34%, #6c7c86 52%, #f1f5f7 70%, #93a2ac 86%, #f7fafc);
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   color-scheme: dark;
+}
+/* Sugli schermi Retina la linea sottile è davvero mezzo pixel, come in iOS. */
+@media (min-resolution: 2dppx) {
+  :root { --line: 0.5px; }
 }
 
 * {
@@ -53,7 +70,9 @@ body {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(120% 55% at 50% -12%, rgba(var(--accent-rgb), .13), transparent 62%),
+    var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   display: flex;
@@ -216,7 +235,7 @@ body.island-fixed .island {
   justify-content: space-between;
   padding: 6px 2px 10px;
 }
-.sheet-header h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.sheet-header h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--silver); }
 .sheet-done {
   color: var(--accent);
   font-size: 17px;
@@ -239,14 +258,17 @@ body.island-fixed .island {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface);
-  color: var(--text-2);
-  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  background: var(--surface-grad);
+  border: var(--line) solid var(--hairline-strong);
+  box-shadow: var(--sheen), var(--lift);
+  color: var(--silver-2);
+  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
 }
 .power-btn svg.icon { width: 22px; height: 22px; stroke-width: 2.4; }
 .power-btn[aria-checked="true"] {
   color: var(--green);
-  box-shadow: inset 0 0 0 2px rgba(var(--green-rgb),.55), 0 0 14px rgba(var(--green-rgb),.25);
+  border-color: rgba(var(--green-rgb), .6);
+  box-shadow: var(--sheen), 0 0 14px rgba(var(--green-rgb), .22);
 }
 .power-btn:active { transform: scale(.94); }
 
@@ -254,10 +276,10 @@ body.island-fixed .island {
   flex: none;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px 14px;
+  gap: var(--btn-gap, 16px) 14px;
   width: 100%;
   max-width: 330px;
-  margin: 0 auto 22px;
+  margin: 0 auto var(--pad-gap, 22px);
 }
 .round-btn {
   display: flex;
@@ -266,21 +288,24 @@ body.island-fixed .island {
   gap: 7px;
 }
 .round-btn-face {
-  width: 82px;
-  height: 82px;
+  width: var(--btn-size, 82px);
+  height: var(--btn-size, 82px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface);
-  color: var(--text);
-  transition: background-color 80ms ease, transform 80ms ease;
+  background: var(--surface-grad);
+  border: var(--line) solid var(--hairline-strong);
+  box-shadow: var(--sheen), var(--lift);
+  color: var(--silver);
+  transition: background-color 80ms ease, transform 80ms ease, border-color 80ms ease, color 80ms ease;
 }
-.round-btn-face svg.icon { width: 30px; height: 30px; }
-.round-btn-label { font-size: 13px; color: var(--text-2); font-weight: 500; }
+.round-btn-face svg.icon { width: 28px; height: 28px; stroke-width: 1.8; }
+.round-btn-face svg.icon.filled { stroke: none; }
+.round-btn-label { font-size: 12px; color: var(--text-2); font-weight: 500; letter-spacing: .01em; }
 .round-btn.accent-active .round-btn-face,
 .round-btn:active .round-btn-face { background: var(--surface-2); transform: scale(0.94); }
-.round-btn.accent-active .round-btn-face { color: var(--accent); }
+.round-btn.accent-active .round-btn-face { color: var(--accent); border-color: rgba(var(--accent-rgb), .55); }
 
 .switch-track {
   flex: none;
@@ -288,6 +313,7 @@ body.island-fixed .island {
   height: 31px;
   border-radius: 16px;
   background: var(--surface-3);
+  border: var(--line) solid var(--hairline);
   position: relative;
   transition: background-color 150ms ease;
 }
@@ -298,8 +324,8 @@ body.island-fixed .island {
   width: 27px;
   height: 27px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 2px 4px rgba(0,0,0,.3);
+  background: linear-gradient(180deg, #ffffff, #e3e9ed);
+  box-shadow: 0 2px 4px rgba(0,0,0,.3), inset 0 0 0 var(--line) rgba(0,0,0,.08);
   transition: transform 150ms ease;
 }
 
@@ -317,7 +343,7 @@ body.island-fixed .island {
 /* ---------- Clickpad ---------- */
 
 .pad-row {
-  --pad-size: min(82vw, 42vh, 320px);
+  --pad-size: var(--pad-fit, min(82vw, 42vh, 320px));
   flex: none;
   display: flex;
   align-items: center;
@@ -330,8 +356,12 @@ body.island-fixed .island {
   height: var(--pad-size);
   border-radius: 50%;
   position: relative;
-  background: radial-gradient(circle at 50% 35%, #173a50, var(--surface) 70%);
-  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb),.14);
+  /* Anello di metallo sottile (come l'alluminio del Siri Remote) attorno al vetro scuro. */
+  border: 1px solid transparent;
+  background:
+    radial-gradient(circle at 50% 30%, #17394c, #0c2433 62%, #081b27 100%) padding-box,
+    var(--metal-ring) border-box;
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .06);
   touch-action: none;
   flex: none;
   overflow: hidden;
@@ -339,7 +369,7 @@ body.island-fixed .island {
 }
 /* ---------- Manopola del volume ---------- */
 
-.clickpad.knob { box-shadow: inset 0 0 0 3px var(--accent); }
+.clickpad.knob { box-shadow: inset 0 0 0 2px var(--accent), 0 0 24px rgba(var(--accent-rgb), .25); }
 .pad-zone, .pad-center { transition: opacity 180ms ease, transform 180ms ease; }
 .clickpad.knob .pad-zone { opacity: 0; transform: scale(.8); }
 .clickpad.knob .pad-center { opacity: 0; }
@@ -370,7 +400,7 @@ body.island-fixed .island {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff, #dfe7ec);
   box-shadow: 0 0 0 5px rgba(var(--accent-rgb),.35), 0 0 16px rgba(var(--accent-rgb),.8);
 }
 .knob-center {
@@ -381,7 +411,9 @@ body.island-fixed .island {
   height: 42%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: var(--surface-2);
+  background: var(--surface-grad);
+  border: var(--line) solid var(--hairline-strong);
+  box-shadow: var(--sheen);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -408,11 +440,11 @@ body.island-fixed .island {
 
 .pad-zone {
   position: absolute;
-  color: var(--text-2);
+  color: var(--silver-2);
   display: flex;
   pointer-events: none;
 }
-.pad-zone svg.icon { width: 26px; height: 26px; }
+.pad-zone svg.icon { width: 24px; height: 24px; stroke-width: 1.8; }
 .pad-zone.pad-up { top: 8%; left: 0; right: 0; justify-content: center; }
 .pad-zone.pad-down { bottom: 8%; left: 0; right: 0; justify-content: center; }
 .pad-zone.pad-left { left: 8%; top: 0; bottom: 0; align-items: center; }
@@ -442,7 +474,9 @@ body.island-fixed .island {
   width: 42%;
   height: 42%;
   border-radius: 50%;
-  background: var(--surface-2);
+  background: linear-gradient(180deg, #15384b, #0e2a3a);
+  border: var(--line) solid var(--hairline-strong);
+  box-shadow: var(--sheen), 0 6px 16px -6px rgba(0, 0, 0, .6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -452,6 +486,7 @@ body.island-fixed .island {
   pointer-events: none;
 }
 .clickpad.pressed-center .pad-center {
+  border-color: transparent;
   background: var(--accent);
   color: var(--accent-ink);
 }
@@ -468,7 +503,7 @@ body.island-fixed .island {
   gap: 10px;
   padding: 5px 0;
 }
-.row-3 .btn { flex: 1; }
+.row .btn { flex: 1; }
 
 .btn {
   display: flex;
@@ -479,7 +514,9 @@ body.island-fixed .island {
   min-height: 54px;
   padding: 8px 6px;
   border-radius: 14px;
-  background: var(--surface);
+  background: var(--surface-grad);
+  border: var(--line) solid var(--hairline);
+  box-shadow: var(--sheen);
   color: var(--text);
   font-size: 12px;
   font-weight: 500;
@@ -509,13 +546,14 @@ body.island-fixed .island {
   padding: 16px 18px;
   font-size: 18px;
   border-radius: 14px;
-  border: none;
+  border: var(--line) solid var(--hairline-strong);
   background: var(--surface);
+  box-shadow: var(--sheen);
   color: var(--text);
   margin-bottom: 16px;
   outline: none;
 }
-#text-input:focus { box-shadow: 0 0 0 2px var(--accent); }
+#text-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .18); }
 #text-input::placeholder { color: var(--text-2); }
 
 .keyboard-hint {
@@ -547,6 +585,8 @@ body.island-fixed .island {
 
 .list {
   background: var(--surface);
+  border: var(--line) solid var(--hairline);
+  box-shadow: var(--sheen);
   border-radius: 14px;
   overflow: hidden;
 }
@@ -556,14 +596,14 @@ body.island-fixed .island {
   gap: 12px;
   width: 100%;
   padding: 13px 14px;
-  border-bottom: 1px solid rgba(var(--accent-rgb),.10);
+  border-bottom: var(--line) solid var(--hairline);
   color: var(--text);
   font-size: 16px;
   text-align: left;
 }
 .list-item:last-child { border-bottom: none; }
 .list-item:active { background: var(--surface-2); }
-.list-item svg.icon { width: 20px; height: 20px; color: var(--accent); flex: none; }
+.list-item svg.icon { width: 20px; height: 20px; color: var(--silver-2); stroke-width: 1.8; flex: none; }
 .list-item .list-item-label { flex: 1; }
 .list-item.danger { color: var(--red); }
 .list-item.danger svg.icon { color: var(--red); }
@@ -574,7 +614,7 @@ body.island-fixed .island {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(var(--accent-rgb),.10);
+  border-bottom: var(--line) solid var(--hairline);
   font-size: 15.5px;
 }
 .list .setting-row:last-child { border-bottom: none; }
@@ -589,6 +629,7 @@ body.island-fixed .island {
 
 .segmented {
   display: flex;
+  border: var(--line) solid var(--hairline);
   background: var(--surface-2);
   border-radius: 9px;
   padding: 2px;
@@ -600,13 +641,19 @@ body.island-fixed .island {
   border-radius: 7px;
   color: var(--text-2);
 }
-.segmented button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.segmented button.active {
+  background: linear-gradient(180deg, #f7fafc, #d5dee4);
+  color: #0a1f2b;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+}
 
 .switch-mini {
   width: 51px;
   height: 31px;
   border-radius: 16px;
   background: var(--surface-3);
+  border: var(--line) solid var(--hairline);
   position: relative;
   flex: none;
 }
@@ -641,7 +688,7 @@ body.island-fixed .island {
   border-radius: 14px;
   overflow: hidden;
   position: relative;
-  border: 1px solid var(--surface-2);
+  border: var(--line) solid var(--hairline-strong);
 }
 
 /* La scheda Telecomando, in modalità demo, deve fare spazio allo schermo finto:
@@ -657,6 +704,7 @@ body.island-fixed .island {
 .demo-keyboard-box {
   margin-top: 10px;
   padding: 12px 14px;
+  border: var(--line) solid var(--hairline);
   background: var(--surface);
   border-radius: 12px;
   font-size: 15px;
@@ -696,7 +744,9 @@ body.island-fixed .island {
   height: 56px;
   margin: 0 auto 14px;
   border-radius: 16px;
-  background: var(--surface);
+  background: var(--surface-grad);
+  border: var(--line) solid var(--hairline-strong);
+  box-shadow: var(--sheen), var(--lift);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -711,6 +761,7 @@ body.island-fixed .island {
   font-size: 16.5px;
   font-weight: 600;
   border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 8px 20px -8px rgba(var(--accent-rgb), .6);
   background: var(--accent);
   color: var(--accent-ink);
 }
@@ -725,8 +776,9 @@ body.island-fixed .island {
   letter-spacing: 0.35em;
   text-align: center;
   border-radius: 14px;
-  border: none;
+  border: var(--line) solid var(--hairline-strong);
   background: var(--surface);
+  box-shadow: var(--sheen);
   color: var(--text);
   -webkit-user-select: text;
   user-select: text;
