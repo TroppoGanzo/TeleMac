@@ -1,92 +1,162 @@
 # TeleMac
 
-Trasforma l'iPhone in un telecomando "ad aria" per il Mac collegato alla TV:
-inclini il telefono per muovere il cursore, come i telecomandini a giroscopio
-dei decoder Android TV — nessuna app da installare, nessun abbonamento.
+Trasforma l'iPhone in un telecomando "ad aria" per il Mac collegato alla TV. Muovi il
+telefono e il cursore lo segue, come con i telecomandi delle smart TV. In più hai i
+tasti per video, volume e tastiera, e la vibrazione a ogni tocco.
+
+Non serve nessuna app dall'App Store e nessun abbonamento. Tutto passa dal Wi-Fi di
+casa, senza server su internet.
+
+**Prova subito, senza Mac:** https://troppoganzo.github.io/TeleMac/ (aprila da Safari
+sull'iPhone). È la modalità demo: il cursore si muove su uno schermo finto, così senti
+come risponde il giroscopio.
+
+---
 
 ## Come funziona
 
-- **Sul Mac** gira un piccolo server scritto in Python (già incluso in macOS,
-  nessuna installazione). Mostra un QR code nel Terminale.
-- **Sull'iPhone** apri Safari, inquadri il QR, e aggiungi la pagina alla
-  schermata Home: da lì si apre a **tutto schermo**, senza barre né zoom, come
-  un'app vera.
-- Il telefono e il Mac si parlano sulla **stessa rete Wi-Fi di casa**: nessun
-  dato esce su internet, nessun server esterno.
+```
+iPhone (app nella schermata Home)  ──Wi-Fi di casa, HTTPS──▶  Mac (server TeleMac)  ──▶  mouse e tastiera
+```
 
-## La prima volta
+- Sul Mac gira un piccolo server in Python. Non serve installare nulla: Python c'è già su macOS.
+- Sull'iPhone l'app è una pagina web aggiunta alla schermata Home. Si apre a tutto
+  schermo come un'app vera: niente barre, niente zoom.
+- Il collegamento è cifrato con un certificato creato dal tuo Mac. Il certificato vale
+  solo per gli indirizzi della rete di casa.
+- Ogni iPhone si abbina una volta sola, con un codice di 6 cifre che compare sul Mac.
+  Funziona come con l'Apple TV.
 
-1. **Permesso di Accessibilità.** Apri *Impostazioni di Sistema → Privacy e
-   sicurezza → Accessibilità* e attiva il Terminale (o l'app che userai per
-   lanciare TeleMac). Senza questo permesso macOS non lascia muovere il mouse
-   via codice.
-2. **Avvia il server**: doppio clic su `TeleMac.command`. La prima volta
-   genera un certificato HTTPS locale (richiede `openssl`, già presente su
-   macOS) e stampa un QR code nel Terminale.
-3. Se macOS chiede di accettare connessioni in entrata per il firewall,
+## Prima configurazione (una volta sola, circa 3 minuti)
+
+**Sul Mac**
+
+1. Scarica il progetto: *Code → Download ZIP* e scompatta la cartella dove vuoi.
+2. Fai doppio clic su **`TeleMac.command`**.
+   - Se macOS dice che non può aprirlo: tasto destro sul file → *Apri* → *Apri*.
+   - La prima volta macOS potrebbe proporti di installare gli "strumenti per sviluppatori"
+     (è il pacchetto che contiene Python): accetta e rilancia il file.
+3. macOS chiede il permesso di **Accessibilità**. Apri *Impostazioni di Sistema → Privacy e
+   sicurezza → Accessibilità* e attiva **Terminale**. Senza questo permesso il Mac
+   ignora i comandi.
+4. Se compaiono domande su "connessioni in entrata" o "dispositivi sulla rete locale",
    rispondi **Consenti**.
-4. **Inquadra il QR** con la fotocamera dell'iPhone (Mac e iPhone devono
-   essere sullo stesso Wi-Fi). Si apre Safari.
-5. La prima volta il certificato è autofirmato: Safari avviserà che il sito
-   non è verificato. Tocca **Mostra dettagli → visita questo sito web** (una
-   volta sola).
-6. Tocca **Condividi → Aggiungi a Home**. Da ora hai un'icona TeleMac sulla
-   schermata Home.
-7. Apri l'app da quell'icona (non da Safari): parte a schermo intero.
-8. Nella scheda **Puntatore**, tocca "Attiva puntatore" e concedi il permesso
-   al movimento quando richiesto da iOS.
 
-Le volte successive basta avviare `TeleMac.command` e aprire l'icona
-sull'iPhone: se il Mac ha lo stesso indirizzo di rete resta tutto collegato
-da solo.
+Nel Terminale compare un **QR code**.
 
-> Se l'indirizzo IP del Mac cambia (capita ogni tanto con il DHCP di casa),
-> riavvia il server e reinquadra il QR una volta.
+**Sull'iPhone** (sulla stessa rete Wi-Fi del Mac)
+
+1. Inquadra il QR con la fotocamera: si apre la pagina di configurazione di TeleMac.
+2. **Installa il certificato**: tocca il pulsante, poi apri *Impostazioni*. In alto trovi
+   *Profilo scaricato*: tocca *Installa*.
+3. **Attiva la fiducia**: *Impostazioni → Generali → Info → Impostazioni certificati
+   attendibili* → attiva **TeleMac CA**.
+4. Torna alla pagina di configurazione, tocca **Verifica** e poi **Apri TeleMac**.
+5. In Safari tocca *Condividi → Aggiungi alla schermata Home*.
+6. Apri TeleMac dall'icona e tocca **Mostra il codice sul Mac**. Sul Mac (quindi sulla TV)
+   compare un codice di 6 cifre: scrivilo sul telefono.
+
+Fatto. Da ora in poi basta aprire l'icona: l'iPhone resta abbinato anche quando riavvii il Mac.
+
+> Se preferisci non passare dalla pagina web per il certificato, puoi mandarlo con
+> **AirDrop**. Nel Finder usa *Vai → Vai alla cartella…*, scrivi `~/.telemac` e manda
+> all'iPhone il file **`TeleMac.mobileconfig`**. Poi prosegui dal passo 3.
+
+## Avvio automatico (consigliato)
+
+Fai doppio clic su **`Installa avvio automatico.command`**. TeleMac parte da solo
+all'accensione del Mac e si riavvia da solo se si chiude. Non c'è nessuna finestra del
+Terminale da tenere aperta.
+
+- macOS chiederà di nuovo il permesso di Accessibilità, questa volta per **Python**.
+- Per toglierlo: **`Rimuovi avvio automatico.command`**.
+- Se ti serve rivedere il QR (per esempio per un iPhone nuovo), apri `TeleMac.command`:
+  se il server è già attivo mostra il QR e basta.
 
 ## Come si usa
 
-- **Puntatore**: inclina il telefono per muovere il cursore. Il pulsante
-  grande al centro è il clic sinistro (tienilo premuto per trascinare); sotto
-  ci sono clic destro, indietro, play/pausa, volume e schermo intero.
-- **Tastiera**: scrivi normalmente, il testo arriva dove hai il cursore sul
-  Mac.
-- **Altro**: cambio app, Mission Control, comandi da browser, spegnimento
-  schermo, e le impostazioni di sensibilità del puntatore (se va nella
-  direzione sbagliata, prova gli interruttori "inverti"/"scambia assi").
+**Telecomando**
 
-## Limiti onesti
+- **Puntatore**: accendi l'interruttore e muovi il telefono per spostare il cursore.
+  Funziona sia tenendolo piatto sia dritto.
+- **Cerchio centrale**: con il puntatore acceso è il clic; tenendo premuto trascini. A
+  puntatore spento è *OK* (Invio).
+  - Mentre il dito è sul centro il cursore si ferma, così il clic arriva dove miravi.
+- **Frecce del cerchio**: frecce della tastiera. Nei player video servono ad andare
+  avanti e indietro. Tenendole premute si ripetono.
+- **Tasti sotto il cerchio**: Indietro (Esc), Play/Pausa, Schermo intero, Volume −/+,
+  Muto, Clic destro, Precedente/Successivo.
+- **Striscia "Scorri"**: trascina il dito per scorrere le pagine.
 
-- Safari su iPhone non dà alle pagine web l'accesso al Bluetooth né una vera
-  vibrazione fisica al tocco (solo un piccolo effetto visivo sul pulsante).
-- Niente Dynamic Island: è una funzione riservata alle app native, non alle
-  pagine web.
-- Serve che il server sia acceso sul Mac; non parte da solo (a meno di
-  configurarlo come voce di login, vedi sotto).
+**Tastiera**
 
-## Avvio automatico al login (facoltativo)
+Quello che scrivi arriva al Mac dove si trova il cursore. Da qui hai anche Invio,
+Cancella, Tab, Esc, Spotlight, Barra degli indirizzi e Cerca.
 
-Se vuoi che TeleMac parta da solo ogni volta che accendi il Mac, apri
-*Impostazioni di Sistema → Generali → Elementi login* e aggiungi
-`TeleMac.command` alla lista "Apri automaticamente all'accesso".
+**Altro**
+
+- Cambia app, Mission Control, comandi del browser, spegni schermo.
+- **Impostazioni**:
+  - sensibilità del puntatore;
+  - inversione degli assi;
+  - tasto Play (multimediale o Spazio);
+  - vibrazione;
+  - *Dimentica questo Mac*.
+
+In alto una pillola nera ti avvisa di quello che succede (collegato, volume, errori).
+Quando l'app è aperta a schermo intero la pillola esce dalla Dynamic Island.
+
+## Problemi comuni
+
+| Problema | Soluzione |
+|---|---|
+| "Mac non raggiungibile" | Il server è acceso? Mac e iPhone sono sullo stesso Wi-Fi? Riapri `TeleMac.command` per controllare. |
+| La pagina dice che il sito non è sicuro | Manca il passo 3 della configurazione (fiducia nel certificato). |
+| Il puntatore non si attiva | Chiudi l'app dal multitasking, riaprila, accendi il puntatore e tocca **Consenti** quando iOS chiede l'accesso al movimento. |
+| Il cursore va nella direzione sbagliata | *Altro → Impostazioni → Inverti orizzontale/verticale*. |
+| Il cursore è troppo lento o veloce | *Altro → Impostazioni → Sensibilità*. |
+| Il Mac non reagisce ai comandi | Manca il permesso di Accessibilità (la pillola in alto te lo segnala). |
+| Voglio scollegare tutti gli iPhone | Nel Terminale: `python3 telemac/server.py --forget-devices` |
+
+## Sicurezza, in breve
+
+- **Il certificato** è creato dal tuo Mac. È valido solo per nomi `.local` e indirizzi
+  della rete di casa, quindi non può essere usato per siti internet. La chiave privata
+  resta nella cartella `~/.telemac` del Mac. Per toglierlo: *Impostazioni → Generali →
+  VPN e gestione dispositivi → TeleMac → Rimuovi profilo*.
+- **Solo i telefoni abbinati** possono comandare il Mac. Il codice dura 2 minuti e si
+  blocca dopo 5 tentativi sbagliati. Ogni blocco raddoppia l'attesa prima del codice
+  successivo.
+- **La pagina di configurazione** (porta 8766) è in chiaro ma non contiene segreti.
+  Per il massimo della prudenza usa AirDrop per il certificato e confronta l'impronta
+  mostrata nel Terminale con quella in *Impostazioni → Profilo → Altri dettagli*.
+
+## Limiti
+
+- **Niente vera Dynamic Island** fuori dall'app: le pagine web non possono usarla. La
+  pillola funziona solo con l'app aperta.
+- **Vibrazione**: su iPhone usa un trucco che funziona da iOS 18 in poi.
+- **Niente Bluetooth**: Safari non lo permette alle pagine web, quindi si passa dal Wi-Fi di casa.
 
 ## Sviluppo
 
 ```
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests        # test del server (anche con Python 3.9)
+node --test tests/web/*.test.js              # test della matematica del puntatore
+python3 telemac/server.py --dry-run          # server "a secco": stampa i comandi invece di eseguirli
+python3 tools/make_icons.py                  # rigenera le icone
 ```
-
-Per provare l'interfaccia senza toccare davvero mouse/tastiera (utile anche
-fuori da un Mac):
-
-```
-python3 telemac/server.py --dry-run
-```
-
-Struttura del progetto:
 
 ```
 telemac/          server (Python, solo libreria standard)
-web/               app per iPhone (HTML/CSS/JS)
-tests/             test automatici
-TeleMac.command    avvio con doppio clic
+  server.py       HTTPS (app, abbinamento, WebSocket) + HTTP (pagina di configurazione)
+  certs.py        certificato "di casa" (CA locale) compatibile con iOS
+  pairing.py      codice di abbinamento e dispositivi abbinati
+  macinput.py     mouse, tastiera e tasti multimediali su macOS (CoreGraphics)
+  autostart.py    avvio automatico (LaunchAgent)
+web/              app per iPhone (HTML/CSS/JS senza dipendenze)
+  pointer.js      matematica del puntatore a giroscopio
+  setup.html      pagina di configurazione
+tests/            test automatici
+tools/            generatore delle icone
 ```

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from typing import Optional
 
 
 class DryRunBackend:
@@ -45,3 +46,19 @@ def create_backend(dry_run=False):
     from macinput import MacBackend
 
     return MacBackend()
+
+
+def accessibility_status(prompt: bool = False) -> Optional[bool]:
+    """Stato del permesso di Accessibilità, o None se non ha senso chiederlo
+    (non siamo su macOS). Importa 'macinput' solo qui dentro: negli altri
+    moduli e nei test (che girano su Linux) non deve mai essere importato."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        import macinput
+    except Exception:
+        return None
+    try:
+        return bool(macinput.is_trusted(prompt))
+    except Exception:
+        return None

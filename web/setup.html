@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Configura TeleMac</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --text: #f2f2f7;
+    --text-2: #8e8e93;
+    --accent: #0a84ff;
+    --green: #30d158;
+    --red: #ff453a;
+    --yellow: #ffd60a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; overflow-x: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    padding: max(20px, env(safe-area-inset-top)) 18px calc(30px + env(safe-area-inset-bottom));
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 6px 0 4px; }
+  .lead { color: var(--text-2); font-size: 14.5px; margin: 0 0 24px; line-height: 1.5; }
+  .preview-banner {
+    background: #3a2f06;
+    color: var(--yellow);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 26px;
+  }
+  .step-num {
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14.5px;
+  }
+  .step-num.done { background: var(--green); color: #06280f; }
+  .step-body { flex: 1; min-width: 0; }
+  .step h2 { font-size: 17px; margin: 4px 0 6px; }
+  .step p { color: var(--text-2); font-size: 14px; line-height: 1.5; margin: 0 0 12px; }
+  .step p strong { color: var(--text); font-weight: 600; }
+  .btn {
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+    padding: 14px;
+    border-radius: 14px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15.5px;
+    font-weight: 600;
+    text-decoration: none;
+    border: none;
+    font-family: inherit;
+  }
+  .btn:active { background: #0a6fd6; }
+  .btn[disabled], .btn.disabled {
+    background: var(--surface-2);
+    color: var(--text-2);
+    pointer-events: none;
+  }
+  .fingerprint {
+    margin-top: 10px;
+    font-size: 11.5px;
+    color: var(--text-2);
+    word-break: break-all;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .alt {
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--text-2);
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 10px 12px;
+    line-height: 1.4;
+  }
+  .status-line {
+    margin-top: 12px;
+    font-size: 13.5px;
+    min-height: 18px;
+  }
+  .status-line.ok { color: var(--green); }
+  .status-line.err { color: var(--red); }
+  .status-line.info { color: var(--text-2); }
+  .footer {
+    margin-top: 30px;
+    text-align: center;
+    font-size: 11.5px;
+    color: #48484a;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Configura TeleMac</h1>
+  <p class="lead" id="lead">Tre passi, una volta sola: dopo il primo abbinamento il tuo iPhone si ricorderà di questo Mac.</p>
+  <div id="preview-banner" class="preview-banner" hidden>
+    Questa è un'anteprima statica della pagina: i pulsanti usano dati di esempio.
+    Apri questa pagina dal Mac (indirizzo mostrato nel Terminale) per configurare davvero.
+  </div>
+
+  <div class="step">
+    <div class="step-num" id="step1-num">1</div>
+    <div class="step-body">
+      <h2>Installa il certificato del tuo Mac</h2>
+      <p>Serve una volta sola per far sì che Safari si fidi del tuo Mac in modo sicuro.</p>
+      <a id="profile-btn" class="btn" href="#">Scarica il profilo</a>
+      <p style="margin-top:12px">Poi apri <strong>Impostazioni</strong>: in alto trovi <strong>Profilo scaricato</strong> → tocca <strong>Installa</strong> (due volte, con il codice del telefono).</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" id="step2-num">2</div>
+    <div class="step-body">
+      <h2>Attiva la fiducia</h2>
+      <p><strong>Impostazioni → Generali → Info → Impostazioni certificati attendibili</strong> → attiva <strong>TeleMac CA</strong>.</p>
+      <div class="fingerprint" id="fingerprint">Impronta: —</div>
+      <div class="alt">In alternativa: puoi mandarti il profilo con AirDrop dal Mac (si trova nella cartella <code>~/.telemac</code>).</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num" id="step3-num">3</div>
+    <div class="step-body">
+      <h2>Apri TeleMac</h2>
+      <p>Verifichiamo che il telefono ora si fidi del Mac, poi puoi aprire l'app.</p>
+      <button id="verify-btn" class="btn" type="button">Verifica</button>
+      <div id="verify-status" class="status-line info"></div>
+      <a id="open-btn" class="btn disabled" href="#" style="margin-top:10px" hidden>Apri TeleMac</a>
+      <p id="after-open" style="margin-top:10px" hidden>Poi: <strong>Condividi → Aggiungi alla schermata Home</strong>.</p>
+    </div>
+  </div>
+
+  <p class="footer">TeleMac · pagina di configurazione (nessun dato lascia la tua rete)</p>
+</div>
+
+<script>
+"use strict";
+const CONFIG = "__TELEMAC_SETUP_CONFIG__";
+
+const EXAMPLE_CONFIG = {
+  appUrls: ["https://Mac-di-Mario.local:8765/", "https://192.168.1.20:8765/"],
+  computerName: "Mac di Mario",
+  caFingerprint: "AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67",
+  profileUrl: "/TeleMac.mobileconfig",
+};
+
+const isPreview = typeof CONFIG === "string";
+const cfg = isPreview ? EXAMPLE_CONFIG : CONFIG;
+
+function $(sel) { return document.querySelector(sel); }
+
+if (isPreview) {
+  $("#preview-banner").hidden = false;
+  $("#lead").textContent = "Anteprima: " + (cfg.computerName || "il tuo Mac") + " — apri questa pagina dal Mac per configurare davvero.";
+} else {
+  $("#lead").textContent = "Tre passi per collegare questo iPhone a " + (cfg.computerName || "il tuo Mac") + ".";
+}
+
+$("#profile-btn").href = cfg.profileUrl;
+$("#profile-btn").addEventListener("click", () => {
+  $("#step1-num").classList.add("done");
+});
+
+$("#fingerprint").textContent = "Impronta: " + (cfg.caFingerprint || "—");
+
+const verifyBtn = $("#verify-btn");
+const verifyStatus = $("#verify-status");
+const openBtn = $("#open-btn");
+const afterOpen = $("#after-open");
+
+function pingUrl(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  return fetch(url + "api/ping", { cache: "no-store", signal: controller.signal })
+    .then((res) => {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error("bad status");
+      return res.json();
+    })
+    .then((data) => (data && data.ok ? url : null))
+    .catch(() => null);
+}
+
+async function verify() {
+  verifyBtn.disabled = true;
+  verifyStatus.className = "status-line info";
+  verifyStatus.textContent = "Verifica in corso…";
+  openBtn.hidden = true;
+  afterOpen.hidden = true;
+
+  const urls = cfg.appUrls || [];
+  const results = await Promise.all(urls.map(pingUrl));
+  const found = results.find((u) => u);
+
+  verifyBtn.disabled = false;
+
+  if (found) {
+    $("#step2-num").classList.add("done");
+    $("#step3-num").classList.add("done");
+    verifyStatus.className = "status-line ok";
+    verifyStatus.textContent = "Il telefono si fida del Mac.";
+    openBtn.href = found;
+    openBtn.hidden = false;
+    openBtn.classList.remove("disabled");
+    afterOpen.hidden = false;
+  } else {
+    verifyStatus.className = "status-line err";
+    verifyStatus.textContent = "Non risponde ancora: torna al passo 2 e controlla di aver attivato la fiducia per TeleMac CA.";
+  }
+}
+
+verifyBtn.addEventListener("click", () => {
+  if (isPreview) {
+    verifyStatus.className = "status-line err";
+    verifyStatus.textContent = "Anteprima: apri questa pagina dal Mac per verificare davvero.";
+    return;
+  }
+  verify();
+});
+</script>
+</body>
+</html>
