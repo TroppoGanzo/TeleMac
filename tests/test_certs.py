@@ -41,6 +41,17 @@ class TestEnsureCertificates(unittest.TestCase):
             self.assertTrue(p.is_file(), f"manca {p}")
         self.assertTrue((self.state / "server.json").is_file())
 
+    def test_nome_del_mac_lunghissimo(self):
+        # macOS accetta nomi host fino a 63 caratteri, ma il CN di un
+        # certificato ne ammette al massimo 64: "TeleMac CA (...)" sforerebbe.
+        host = "a" * 63 + ".local"
+        paths = certs.ensure_certificates(self.state, [host], ["192.168.1.20"])
+        for cert in (paths.ca_cert, paths.server_cert):
+            subject = _openssl("x509", "-in", str(cert), "-noout", "-subject").decode()
+            self.assertIn("CN", subject)
+        san = _openssl("x509", "-in", str(paths.server_cert), "-noout", "-ext", "subjectAltName").decode()
+        self.assertIn(host, san)  # il nome intero resta nel SAN, quello che conta per Safari
+
     def test_permessi_delle_chiavi(self):
         paths = certs.ensure_certificates(self.state, ["mac.local"], [])
         self.assertEqual(paths.ca_key.stat().st_mode & 0o777, 0o600)
