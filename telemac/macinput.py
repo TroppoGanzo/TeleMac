@@ -1,7 +1,8 @@
 """Controllo di mouse e tastiera su macOS tramite CoreGraphics (via ctypes, zero dipendenze).
 
-Richiede che l'app che avvia il server (di solito il Terminale) sia autorizzata in
-Impostazioni di Sistema → Privacy e sicurezza → Accessibilità.
+Richiede che l'app che avvia il server (TeleMac.app, o il Terminale per chi lo
+lancia a mano) sia autorizzata in Impostazioni di Sistema → Privacy e
+sicurezza → Accessibilità.
 """
 
 from __future__ import annotations
@@ -92,6 +93,39 @@ _SEL_OTHER_EVENT = sel_registerName(
 )
 _SEL_CGEVENT = sel_registerName(b"CGEvent")
 
+
+def hide_from_dock():
+    """Niente icona di Python (il razzo) nel Dock.
+
+    Il server è un processo di sfondo: appena parla con il window server (per i
+    tasti multimediali o il cursore grande) macOS lo tratterebbe come un'app
+    "Python" con la sua icona. Lo segniamo come agente senza interfaccia prima
+    che succeda. Va chiamata dal thread principale, una volta sola."""
+    try:
+        send_id = ctypes.CFUNCTYPE(c_void_p, c_void_p, c_void_p)(_MSG_SEND)
+        send_str = ctypes.CFUNCTYPE(c_void_p, c_void_p, c_void_p, c_char_p)(_MSG_SEND)
+        send_responds = ctypes.CFUNCTYPE(c_bool, c_void_p, c_void_p, c_void_p)(_MSG_SEND)
+        send_set = ctypes.CFUNCTYPE(None, c_void_p, c_void_p, c_void_p, c_void_p)(_MSG_SEND)
+        send_policy = ctypes.CFUNCTYPE(c_bool, c_void_p, c_void_p, c_long)(_MSG_SEND)
+        pool = objc_autoreleasePoolPush()
+        try:
+            ns_string = objc_getClass(b"NSString")
+            sel_utf8 = sel_registerName(b"stringWithUTF8String:")
+            bundle = send_id(objc_getClass(b"NSBundle"), sel_registerName(b"mainBundle"))
+            info = send_id(bundle, sel_registerName(b"infoDictionary")) if bundle else None
+            sel_set = sel_registerName(b"setObject:forKey:")
+            # Solo se il dizionario è modificabile: altrimenti ObjC solleverebbe
+            # un'eccezione che da ctypes non si può intercettare.
+            if info and send_responds(info, sel_registerName(b"respondsToSelector:"), sel_set):
+                send_set(info, sel_set, send_str(ns_string, sel_utf8, b"1"), send_str(ns_string, sel_utf8, b"LSUIElement"))
+            app = send_id(objc_getClass(b"NSApplication"), sel_registerName(b"sharedApplication"))
+            if app:
+                send_policy(app, sel_registerName(b"setActivationPolicy:"), 2)  # Prohibited: mai nel Dock
+        finally:
+            objc_autoreleasePoolPop(pool)
+    except Exception:
+        pass
+
 kCGHIDEventTap = 0
 kCGEventLeftMouseDown = 1
 kCGEventLeftMouseUp = 2
@@ -174,6 +208,8 @@ class MacBackend:
         self._display_asleep = False
         self._cursor_api = None
         self._cursor_original = None  # dimensione del cursore prima che la cambiassimo
+        self._cursor_target = None    # dimensione voluta dal telecomando (None = non toccare)
+        self._cursor_checked = 0.0
 
     # --- posizione del puntatore ---
 
@@ -232,6 +268,7 @@ class MacBackend:
 
     def move(self, dx, dy):
         self._wake()
+        self._keep_cursor_big()
         prev = self._location()
         x, y = self._clamp(prev[0] + dx, prev[1] + dy, prev)
         self._pos = (x, y)
@@ -362,11 +399,33 @@ class MacBackend:
                 if get(cid, ctypes.byref(current)) == 0:
                     self._cursor_original = current.value
             target = scale if scale > 1 else (self._cursor_original or 1.0)
+            self._cursor_target = scale if scale > 1 else None
+            self._cursor_checked = time.monotonic()
             return set_(cid, c_float(target)) == 0
         except Exception:
             return False
 
+    def _keep_cursor_big(self):
+        """Mentre il telecomando muove il cursore, deve restare grande: se macOS
+        (o un'altra app) l'ha rimesso piccolo, lo ringrandiamo. Controllo
+        leggero, al massimo due volte al secondo."""
+        if not self._cursor_target or not self._cursor_api:
+            return
+        now = time.monotonic()
+        if now - self._cursor_checked < 0.5:
+            return
+        self._cursor_checked = now
+        try:
+            main, get, set_ = self._cursor_api
+            cid = main()
+            current = c_float(0.0)
+            if get(cid, ctypes.byref(current)) != 0 or abs(current.value - self._cursor_target) > 0.05:
+                set_(cid, c_float(self._cursor_target))
+        except Exception:
+            pass
+
     def cursor_restore(self):
+        self._cursor_target = None
         if self._cursor_original is None:
             return
         self.cursor_scale(1)

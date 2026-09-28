@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "telemac"))
 
-from qr import render_terminal  # noqa: E402
+from qr import render_svg, render_terminal  # noqa: E402
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -47,6 +47,21 @@ class TestQr(unittest.TestCase):
         lines = art.splitlines()
         expected_rows = -(-(size + 2 * 4) // 2)  # ceil
         self.assertEqual(len(lines), expected_rows)
+
+
+class TestQrSvg(unittest.TestCase):
+    def test_svg_con_bordo_e_moduli(self):
+        svg = render_svg("http://192.168.1.20:8766/")
+        self.assertTrue(svg.startswith("<svg"))
+        self.assertTrue(svg.endswith("</svg>"))
+        self.assertIn('fill="#ffffff"', svg)
+        self.assertIn("h1v1h-1z", svg)
+        # Il primo modulo scuro (angolo del QR) sta dopo il bordo di 4 moduli.
+        self.assertIn('d="M4,4h1v1h-1z', svg)
+
+    def test_stesso_testo_stesso_svg(self):
+        self.assertEqual(render_svg("ciao"), render_svg("ciao"))
+        self.assertNotEqual(render_svg("ciao"), render_svg("ciao!"))
 
 
 if __name__ == "__main__":

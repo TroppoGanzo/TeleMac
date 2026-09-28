@@ -50,9 +50,10 @@ class DryRunBackend:
 def create_backend(dry_run=False):
     if dry_run or sys.platform != "darwin":
         return DryRunBackend()
-    from macinput import MacBackend
+    import macinput
 
-    return MacBackend()
+    macinput.hide_from_dock()
+    return macinput.MacBackend()
 
 
 def accessibility_status(prompt: bool = False) -> Optional[bool]:

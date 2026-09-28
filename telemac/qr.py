@@ -1,6 +1,6 @@
-"""Disegna un QR code leggibile nel terminale, due moduli per riga di testo
-(▀, colorato) con colori ANSI espliciti: moduli neri su sfondo bianco sempre,
-anche con terminale a tema scuro (altrimenti "nero su nero" sparirebbe)."""
+"""Disegna il QR code: nel terminale, due moduli per riga di testo (▀,
+colorato) con colori ANSI espliciti (moduli neri su sfondo bianco sempre, anche
+con terminale a tema scuro), oppure come SVG per la finestra dell'app per Mac."""
 
 from __future__ import annotations
 
@@ -38,3 +38,21 @@ def render_terminal(text: str) -> str:
         row.append(_RESET)
         lines.append("".join(row))
     return "\n".join(lines)
+
+
+def render_svg(text: str, dark: str = "#03111a", light: str = "#ffffff", border: int = BORDER) -> str:
+    """Lo stesso QR come immagine SVG (un solo <path>), per la finestra dell'app."""
+    qr = qrcodegen.QrCode.encode_text(text, qrcodegen.QrCode.Ecc.MEDIUM)
+    size = qr.get_size()
+    full = size + 2 * border
+    parts = []
+    for y in range(size):
+        for x in range(size):
+            if qr.get_module(x, y):
+                parts.append(f"M{x + border},{y + border}h1v1h-1z")
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {full} {full}" '
+        f'shape-rendering="crispEdges" role="img" aria-label="QR code">'
+        f'<rect width="{full}" height="{full}" fill="{light}"/>'
+        f'<path d="{"".join(parts)}" fill="{dark}"/></svg>'
+    )

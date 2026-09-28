@@ -726,6 +726,88 @@ class TestReleasePressed(unittest.TestCase):
         self.assertNotIn(("button", server.CURSOR_MARK, False), backend.calls)
 
 
+class TestCursoreConPiuConnessioni(unittest.TestCase):
+    """L'iPhone si ricollega: la connessione vecchia si chiude dopo che la nuova
+    ha già ingrandito il cursore. Non deve rimpicciolirlo."""
+
+    def test_la_connessione_vecchia_non_rimpicciolisce(self):
+        backend = RecordingBackend()
+        lock = threading.Lock()
+        vecchia, nuova = set(), set()
+        server.handle_message(backend, lock, json.dumps({"type": "cursor", "scale": 2.5}), vecchia)
+        server.handle_message(backend, lock, json.dumps({"type": "cursor", "scale": 2.5}), nuova)
+        server.release_pressed(backend, lock, vecchia)
+        self.assertNotIn(("cursor_restore",), backend.calls)
+        self.assertEqual(backend.calls[-1], ("cursor_scale", 2.5))
+        server.release_pressed(backend, lock, nuova)
+        self.assertEqual(backend.calls[-1], ("cursor_restore",))
+
+    def test_spegnere_su_un_telefono_non_spegne_l_altro(self):
+        backend = RecordingBackend()
+        lock = threading.Lock()
+        a, b = set(), set()
+        server.handle_message(backend, lock, json.dumps({"type": "cursor", "scale": 3}), a)
+        server.handle_message(backend, lock, json.dumps({"type": "cursor", "scale": 1}), b)
+        self.assertEqual(backend.calls[-1], ("cursor_scale", 3))
+
+
+class TestSmoothMover(unittest.TestCase):
+    def setUp(self):
+        self.backend = RecordingBackend()
+        self.lock = threading.Lock()
+        self.mover = server.SmoothMover(self.backend, self.lock, start=False)
+
+    def _moved(self):
+        xs = [c[1] for c in self.backend.calls if c[0] == "move"]
+        ys = [c[2] for c in self.backend.calls if c[0] == "move"]
+        return sum(xs), sum(ys), len(xs)
+
+    def test_una_raffica_viene_distribuita_in_piu_passi(self):
+        # Tre messaggi arrivati tutti insieme dopo una pausa del Wi-Fi.
+        for _ in range(3):
+            self.mover.add(10.0, -5.0)
+        self.mover.step(1 / 120)
+        first = self.backend.calls[0]
+        self.assertLess(abs(first[1]), 30.0)  # non salta tutto in un colpo
+        self.assertGreater(abs(first[1]), 0.0)
+        for _ in range(60):
+            self.mover.step(1 / 120)
+        x, y, n = self._moved()
+        self.assertAlmostEqual(x, 30.0, places=6)  # alla fine arriva esattamente
+        self.assertAlmostEqual(y, -15.0, places=6)
+        self.assertGreater(n, 3)
+
+    def test_i_passi_calano_dolcemente(self):
+        self.mover.add(40.0, 0.0)
+        for _ in range(5):
+            self.mover.step(1 / 120)
+        steps = [c[1] for c in self.backend.calls]
+        self.assertEqual(steps, sorted(steps, reverse=True))
+
+    def test_flush_prima_del_clic(self):
+        mover = self.mover
+        mover.add(12.0, 7.0)
+        server.handle_message(self.backend, self.lock, json.dumps({"type": "click", "button": "left"}), set(), mover)
+        self.assertEqual(self.backend.calls[-1], ("click", "left"))
+        x, y, _ = self._moved()
+        self.assertAlmostEqual(x, 12.0)
+        self.assertAlmostEqual(y, 7.0)
+
+    def test_move_passa_dal_mover(self):
+        server.handle_message(self.backend, self.lock, json.dumps({"type": "move", "dx": 3, "dy": 4}), set(), self.mover)
+        self.assertEqual(self.backend.calls, [])  # niente subito: ci pensa il ritmo costante
+        self.mover.flush()
+        self.assertEqual(self.backend.calls, [("move", 3.0, 4.0)])
+
+    def test_thread_vero(self):
+        mover = server.SmoothMover(self.backend, self.lock)
+        mover.add(50.0, 0.0)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and abs(self._moved()[0] - 50.0) > 1e-6:
+            time.sleep(0.02)
+        self.assertAlmostEqual(self._moved()[0], 50.0, places=6)
+
+
 class TestCursorMessage(unittest.TestCase):
     def setUp(self):
         self.backend = RecordingBackend()

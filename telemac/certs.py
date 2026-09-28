@@ -145,13 +145,25 @@ def _load_meta(state_dir: Path) -> Optional[dict]:
     return data if isinstance(data, dict) else None
 
 
+# Il CN di un certificato ammette al massimo 64 caratteri, ma un nome host di
+# macOS può arrivare a 63 (+ ".local"). Il CN serve solo da etichetta: per
+# Safari conta il subjectAltName, che contiene sempre il nome intero.
+CN_MAX = 64
+
+
+def _ca_common_name(host: str) -> str:
+    prefix, suffix = "TeleMac CA (", ")"
+    room = CN_MAX - len(prefix) - len(suffix)
+    return prefix + host[:room] + suffix  # solo ASCII: openssl req non usa -utf8
+
+
 def _ca_config(cn_host: str) -> str:
     return (
         "[req]\n"
         "distinguished_name = dn\n"
         "prompt = no\n"
         "[dn]\n"
-        f"CN = TeleMac CA ({cn_host})\n"
+        f"CN = {_ca_common_name(cn_host)}\n"
         "O = TeleMac\n"
         "[v3_ca]\n"
         "basicConstraints = critical, CA:TRUE, pathlen:0\n"
@@ -211,7 +223,7 @@ def _create_ca(state_dir: Path, hostnames: List[str]) -> None:
 def _create_server_cert(state_dir: Path, hostnames: List[str], ips: List[str]) -> None:
     paths = _paths(state_dir)
     hostnames = hostnames or ["localhost"]
-    cn = hostnames[0]
+    cn = hostnames[0][:CN_MAX]
     _generate_key(paths.server_key)
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)

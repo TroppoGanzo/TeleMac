@@ -200,3 +200,14 @@ class DeviceStore:
 
     def count(self) -> int:
         return len(self._load())
+
+    def devices(self) -> list:
+        """Nome e data di abbinamento di ogni dispositivo (mai l'hash del token)."""
+        out = []
+        for device in self._load():
+            if isinstance(device, dict):
+                out.append({
+                    "name": str(device.get("name", "iPhone")),
+                    "addedAt": str(device.get("added_at", "")),
+                })
+        return out

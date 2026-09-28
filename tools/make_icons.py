@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Genera le icone PNG di TeleMac (180/192/512 px).
+"""Genera le icone di TeleMac: i PNG per l'iPhone (180/192/512 px) e
+l'icona dell'app per Mac (macos/AppIcon.icns).
 
 Piccolo motore di disegno vettoriale scritto a mano, con antialiasing per
-supersampling (4x4 campioni per pixel) e compressione PNG via `zlib`: nessuna
-dipendenza esterna, solo libreria standard.
+supersampling e compressione PNG via `zlib`: nessuna dipendenza esterna, solo
+libreria standard.
 
-Disegno: sfondo azzurro con un gradiente morbido in diagonale e, al centro,
+Disegno: sfondo blu ciano con un gradiente morbido in diagonale e, al centro,
 la sagoma bianca di un telecomando stile Siri Remote (clickpad circolare in
 alto e due tasti tondi sotto), con un'ombra leggera sfumata.
 
-iOS arrotonda da solo gli angoli delle icone della schermata Home: qui NON
-arrotondiamo nulla e non usiamo trasparenza (l'immagine è RGB piena, niente
-canale alpha).
+iOS arrotonda da solo gli angoli delle icone della schermata Home: lì NON
+arrotondiamo nulla e non usiamo trasparenza (PNG RGB pieno). macOS invece
+vuole l'icona già "a mattonella": quadrato arrotondato con margine
+trasparente e ombra, come le icone di sistema (PNG RGBA dentro l'.icns).
 """
 
 from __future__ import annotations
@@ -25,16 +27,29 @@ from typing import Tuple
 Color = Tuple[int, int, int]
 
 # --- Palette ---------------------------------------------------------------
-BG_A: Color = (0x7A, 0xB2, 0xFF)       # azzurro chiaro (in alto a sinistra)
-BG_B: Color = (0x3B, 0x5B, 0xF0)       # blu (in basso a destra)
-SHADOW: Color = (0x1E, 0x2F, 0x9E)     # ombra del telecomando
+# Tutto deriva dal blu ciano di TeleMac (#1AB8EF), lo stesso delle app.
+BG_A: Color = (0x5F, 0xDD, 0xFF)       # ciano chiaro (in alto a sinistra)
+BG_B: Color = (0x0A, 0x7C, 0xC9)       # blu ciano profondo (in basso a destra)
+SHADOW: Color = (0x05, 0x3F, 0x6B)     # ombra del telecomando
 BODY: Color = (0xFF, 0xFF, 0xFF)       # corpo del telecomando
-PAD: Color = (0xDF, 0xE7, 0xFA)        # clickpad e tasti, grigio-azzurro tenue
-PAD_CENTER: Color = (0xF6, 0xF8, 0xFF) # pulsante centrale del clickpad
+PAD: Color = (0xD4, 0xF1, 0xFB)        # clickpad e tasti, ciano tenue
+PAD_CENTER: Color = (0xF2, 0xFB, 0xFF) # pulsante centrale del clickpad
 
 ICON_SIZES = (180, 192, 512)
 _SUB = 4  # supersampling 4x4 = 16 campioni per pixel
 _SUB_OFFSETS = tuple((i + 0.5) / _SUB for i in range(_SUB))
+
+# Icona per Mac: la "mattonella" occupa 824 px su 1024 (griglia Apple), con
+# angoli arrotondati e un'ombra morbida sotto.
+MAC_TILE = 824 / 1024
+MAC_RADIUS = 185 / 1024
+MAC_SHADOW_ALPHA = 0.32
+# Tipi di blocco dell'.icns (PNG dentro) e lato in pixel di ciascuno.
+ICNS_TYPES = (
+    (b"icp4", 16), (b"icp5", 32), (b"icp6", 64), (b"ic07", 128), (b"ic08", 256),
+    (b"ic09", 512), (b"ic10", 1024), (b"ic11", 32), (b"ic12", 64), (b"ic13", 256),
+    (b"ic14", 512),
+)
 
 
 def _mix(c1: Color, c2: Color, t: float) -> Color:
@@ -136,6 +151,77 @@ def make_icon_png(size: int) -> bytes:
     )
 
 
+def _sample_mac(u: float, v: float, size: float) -> Tuple[float, float, float, float]:
+    """Colore RGBA nel punto (u, v) dell'icona per Mac di lato `size`."""
+    half = size * MAC_TILE / 2
+    radius = size * MAC_RADIUS
+    c = size / 2
+    d = _rounded_rect_dist(u, v, c, c, half, half, radius)
+    if d <= 0.0:
+        # Dentro la mattonella: lo stesso disegno dell'icona per iPhone.
+        tile = 2 * half
+        r, g, b = _sample(u - (c - half), v - (c - half), tile)
+        return r, g, b, 1.0
+    # Fuori: solo l'ombra, sfumata e spostata un po' in basso.
+    blur = size * 0.035
+    sd = _rounded_rect_dist(u, v, c, c + size * 0.012, half, half, radius)
+    if sd < blur:
+        t = 1.0 - max(0.0, sd) / blur
+        return 0.0, 0.0, 0.0, MAC_SHADOW_ALPHA * t * t
+    return 0.0, 0.0, 0.0, 0.0
+
+
+def make_mac_icon_png(size: int) -> bytes:
+    """Icona per Mac `size`x`size`, RGBA 8 bit (angoli trasparenti)."""
+    sub = 4 if size <= 256 else 2  # le taglie grandi sono già lisce con meno campioni
+    offsets = tuple((i + 0.5) / sub for i in range(sub))
+    n = sub * sub
+    rows = []
+    for y in range(size):
+        row = bytearray(1 + size * 4)
+        for x in range(size):
+            r_sum = g_sum = b_sum = a_sum = 0.0
+            for oy in offsets:
+                for ox in offsets:
+                    r, g, b, a = _sample_mac(x + ox, y + oy, size)
+                    r_sum += r * a
+                    g_sum += g * a
+                    b_sum += b * a
+                    a_sum += a
+            i = 1 + x * 4
+            if a_sum > 0:
+                row[i] = min(255, int(r_sum / a_sum + 0.5))
+                row[i + 1] = min(255, int(g_sum / a_sum + 0.5))
+                row[i + 2] = min(255, int(b_sum / a_sum + 0.5))
+            row[i + 3] = min(255, int(a_sum / n * 255 + 0.5))
+        rows.append(bytes(row))
+    header = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)  # RGBA, 8 bit/canale
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", header)
+        + _png_chunk(b"IDAT", zlib.compress(b"".join(rows), 9))
+        + _png_chunk(b"IEND", b"")
+    )
+
+
+def make_icns(pngs: dict) -> bytes:
+    """Impacchetta i PNG (lato -> dati) in un file .icns."""
+    blocks = b""
+    for kind, side in ICNS_TYPES:
+        data = pngs[side]
+        blocks += kind + struct.pack(">I", 8 + len(data)) + data
+    return b"icns" + struct.pack(">I", 8 + len(blocks)) + blocks
+
+
+def generate_mac_icon(path: Path) -> None:
+    sides = sorted({side for _, side in ICNS_TYPES})
+    pngs = {side: make_mac_icon_png(side) for side in sides}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = make_icns(pngs)
+    path.write_bytes(data)
+    print(f"  {path} ({len(data)} byte)")
+
+
 def generate_icons(out_dir: Path, sizes=ICON_SIZES) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for size in sizes:
@@ -146,9 +232,10 @@ def generate_icons(out_dir: Path, sizes=ICON_SIZES) -> None:
 
 
 def main() -> int:
-    web_dir = Path(__file__).resolve().parent.parent / "web"
+    root = Path(__file__).resolve().parent.parent
     print("Genero le icone TeleMac...")
-    generate_icons(web_dir)
+    generate_icons(root / "web")
+    generate_mac_icon(root / "macos" / "AppIcon.icns")
     print("Fatto.")
     return 0
 
