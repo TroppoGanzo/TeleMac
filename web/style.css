@@ -484,7 +484,39 @@ body.island-fixed .island {
   font-weight: 600;
   color: var(--text);
   pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease, width 200ms ease, height 200ms ease, background-color 120ms ease, border-color 120ms ease;
 }
+/* Trackpad: il cerchio diventa un quadrato arrotondato come un Magic Trackpad.
+   Il vetro interno (74%, vedi TRACKPAD_INNER in app.js) muove il cursore; la
+   cornice tiene frecce e volume. */
+.clickpad, .pad-glow { transition: box-shadow 150ms ease, border-radius 220ms ease; }
+.clickpad.trackpad, .clickpad.trackpad .pad-glow { border-radius: 34px; }
+.clickpad.trackpad .pad-zone.pad-up { top: 3.5%; }
+.clickpad.trackpad .pad-zone.pad-down { bottom: 3.5%; }
+.clickpad.trackpad .pad-zone.pad-left { left: 3.5%; }
+.clickpad.trackpad .pad-zone.pad-right { right: 3.5%; }
+.clickpad.trackpad .pad-zone svg.icon { width: 20px; height: 20px; }
+.clickpad.trackpad .pad-center {
+  width: 74%;
+  height: 74%;
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .07), transparent 60%),
+    linear-gradient(180deg, #143547, #0d2736);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), inset 0 -10px 24px -14px rgba(0, 0, 0, .7);
+}
+.clickpad.trackpad .pad-center::after {
+  content: "Scorri per muovere\A Tocca: clic · Tieni: trascina\A Due dita: scorri";
+  white-space: pre;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--text-2);
+  opacity: .7;
+}
+.clickpad.trackpad.pressed-center .pad-center::after,
+.clickpad.trackpad.dragging .pad-center::after { opacity: 0; }
 .clickpad.pressed-center .pad-center {
   border-color: transparent;
   background: var(--accent);

@@ -38,6 +38,9 @@
   var GAIN_MIN = 0.3;
   var GAIN_MAX = 1.8;
   var GAIN_SPEED_DIV = 80;
+  var TRACKPAD_GAIN_MIN = 0.85;
+  var TRACKPAD_GAIN_MAX = 3.2;
+  var TRACKPAD_SPEED_DIV = 550;
   var DT_MAX = 0.05;
   var FALLBACK_U = { x: 0, y: 0.643, z: 0.766 };
 
@@ -146,6 +149,22 @@
     if (settings.invertX) dx = -dx;
     if (settings.invertY) dy = -dy;
 
+    return { dx: dx, dy: dy };
+  }
+
+  // computeTrackpadDelta: funzione pura per lo spostamento del dito sul trackpad.
+  // rawDx/rawDy in pixel CSS, dt in secondi, settings {sensitivity,invertX,invertY}.
+  function computeTrackpadDelta(rawDx, rawDy, dt, settings) {
+    if (!rawDx && !rawDy) return { dx: 0, dy: 0 };
+    var cfg = settings || {};
+    var sens = (cfg.sensitivity != null ? cfg.sensitivity : 20) / 20;
+    var safeDt = dt > 0 ? clamp(dt, 0.004, DT_MAX) : 0.016;
+    var speed = Math.hypot(rawDx, rawDy) / safeDt;
+    var gain = sens * clamp(TRACKPAD_GAIN_MIN + speed / TRACKPAD_SPEED_DIV, TRACKPAD_GAIN_MIN, TRACKPAD_GAIN_MAX);
+    var dx = rawDx * gain;
+    var dy = rawDy * gain;
+    if (cfg.invertX) dx = -dx;
+    if (cfg.invertY) dy = -dy;
     return { dx: dx, dy: dy };
   }
 
@@ -303,6 +322,21 @@
       accY += d.dy;
     }
 
+    var lastTrackpadTime = null;
+
+    function resetTrackpad() {
+      lastTrackpadTime = null;
+    }
+
+    function handleTrackpad(rawDx, rawDy) {
+      var t = now();
+      var dt = lastTrackpadTime === null ? 0.016 : clamp((t - lastTrackpadTime) / 1000, 0.004, DT_MAX);
+      lastTrackpadTime = t;
+      var d = computeTrackpadDelta(rawDx, rawDy, dt, getSettings());
+      accX += d.dx;
+      accY += d.dy;
+    }
+
     function takeDelta() {
       var d = { dx: accX, dy: accY };
       accX = 0;
@@ -312,6 +346,8 @@
 
     return {
       handleMotion: handleMotion,
+      handleTrackpad: handleTrackpad,
+      resetTrackpad: resetTrackpad,
       freeze: freeze,
       setEnabled: setEnabled,
       takeDelta: takeDelta,
@@ -320,5 +356,10 @@
     };
   }
 
-  return { computeDelta: computeDelta, createPointer: createPointer, AXIS_MAPS: AXIS_MAPS };
+  return {
+    computeDelta: computeDelta,
+    computeTrackpadDelta: computeTrackpadDelta,
+    createPointer: createPointer,
+    AXIS_MAPS: AXIS_MAPS,
+  };
 });

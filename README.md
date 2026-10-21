@@ -20,9 +20,9 @@ iPhone (app nella schermata Home)  ──Wi-Fi di casa, HTTPS──▶  TeleMac.
 ```
 
 - Sul Mac c'è **TeleMac.app**, un'app normale con la sua finestra: lì compaiono il QR
-  da inquadrare e il codice per abbinare l'iPhone. Niente Terminale, niente icona di
-  Python nel Dock: il piccolo server in Python gira nascosto dentro l'app e si ferma
-  quando la chiudi.
+  da inquadrare e il codice per abbinare l'iPhone. Niente Terminale e niente
+  programmi da installare: il server è codice Swift dentro l'app e si ferma quando
+  la chiudi.
 - Sull'iPhone l'app è una pagina web aggiunta alla schermata Home. Si apre a tutto
   schermo come un'app vera: niente barre, niente zoom.
 - Il collegamento è cifrato con un certificato creato dal tuo Mac. Il certificato vale
@@ -49,9 +49,8 @@ iPhone (app nella schermata Home)  ──Wi-Fi di casa, HTTPS──▶  TeleMac.
 5. Se macOS chiede di usare i "dispositivi sulla rete locale" o di accettare
    "connessioni in entrata", rispondi **Consenti**.
 
-TeleMac usa il Python di macOS, che arriva con gli "strumenti per sviluppatori". Se
-mancano, la finestra di TeleMac lo dice e ha un pulsante per installarli (gratis,
-pochi minuti).
+TeleMac non ha bisogno di Python né degli strumenti per sviluppatori: funziona su
+qualunque Mac con macOS 12 o successivo (usa solo `/usr/bin/openssl`, che c'è sempre).
 
 Se avevi la versione precedente con l'avvio automatico dal Terminale, TeleMac.app
 lo toglie da sola al primo avvio. I vecchi file `.command` non servono più.
@@ -214,10 +213,11 @@ Ciarlo", lo crea la prima volta.
 ## Sviluppo
 
 ```
-python3 -m unittest discover -s tests        # test del server (anche con Python 3.9)
+python3 -m unittest tests.test_app           # prova l'app compilata (build/TeleMac.app) in modalità --headless --dry-run
+python3 -m unittest discover -s tests        # anche i test del server Python di riferimento (telemac/)
 node --test tests/web/*.test.js              # test della matematica del puntatore
-python3 telemac/server.py --dry-run          # server "a secco" nel terminale: stampa i comandi invece di eseguirli
-python3 telemac/server.py --app --dry-run    # come lo avvia l'app: eventi su stdout e pannello locale
+build/TeleMac.app/Contents/MacOS/TeleMac --headless --dry-run   # solo il server, "a secco": stampa i comandi invece di eseguirli
+python3 telemac/server.py --dry-run          # il vecchio server Python di riferimento (non più usato dall'app)
 python3 tools/make_icons.py                  # rigenera le icone (iPhone e Mac)
 tools/build_mac_app.sh --dmg                 # compila e firma TeleMac.app (su macOS)
 ```
@@ -227,10 +227,17 @@ sfondi, superfici e testi sono lo stesso tono via via più scuro.
 
 ```
 macos/            app per Mac
-  TeleMac/main.swift  finestra, avvio del server, permessi, avvio automatico
+  TeleMac/main.swift      finestra, permessi, avvio automatico
+  TeleMac/Server.swift    rotte, abbinamento, comandi dell'iPhone, movimento fluido
+  TeleMac/HTTPServer.swift HTTPS + WebSocket sopra Network.framework
+  TeleMac/Certs.swift     CA e certificato "di casa" (con /usr/bin/openssl)
+  TeleMac/Pairing.swift   codice di abbinamento e dispositivi abbinati
+  TeleMac/MacInput.swift  mouse, tastiera, tasti multimediali, cursore grande
+  TeleMac/Panel.swift     la finestra serve panel.html con lo schema telemac://
+  TeleMac/{Keys,NetInfo,QR,Headless}.swift
   Info.plist      nome, versione, © Edoardo Ciarlo
   AppIcon.icns    icona (generata da tools/make_icons.py)
-telemac/          server (Python, solo libreria standard)
+telemac/          server Python di riferimento (non è dentro l'app: l'app usa quello Swift)
   server.py       HTTPS (app, abbinamento, WebSocket) + HTTP (pagina di configurazione)
   panel.py        pannello della finestra per Mac (solo 127.0.0.1)
   certs.py        certificato "di casa" (CA locale) compatibile con iOS

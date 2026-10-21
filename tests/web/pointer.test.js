@@ -6,7 +6,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { computeDelta, createPointer } = require(path.join(__dirname, "..", "..", "web", "pointer.js"));
+const { computeDelta, computeTrackpadDelta, createPointer } = require(path.join(__dirname, "..", "..", "web", "pointer.js"));
 
 const SETTINGS = { sensitivity: 20, invertX: false, invertY: false };
 
@@ -399,4 +399,38 @@ test("stabilizzazione a 0 = comportamento di prima", () => {
   const b = runPointer(undefined, wave, 1);
   assert.equal(a.sumX, b.sumX);
   assert.equal(a.sumY, b.sumY);
+});
+
+/* ---------- Trackpad ---------- */
+
+test("trackpad: movimento lento e veloce, sensibilità e inversione assi", () => {
+  assert.deepEqual(computeTrackpadDelta(0, 0, 0.016, SETTINGS), { dx: 0, dy: 0 });
+
+  const slow = computeTrackpadDelta(2, 0, 0.02, SETTINGS);
+  const fast = computeTrackpadDelta(20, 0, 0.02, SETTINGS);
+  // Con movimento 10x più veloce nello stesso dt, l'accelerazione dà più di 10x spostamento
+  assert.ok(fast.dx > slow.dx * 10, `fast.dx=${fast.dx} slow.dx=${slow.dx}`);
+
+  const doubleSens = computeTrackpadDelta(5, -3, 0.016, Object.assign({}, SETTINGS, { sensitivity: 40 }));
+  const normalSens = computeTrackpadDelta(5, -3, 0.016, SETTINGS);
+  assert.ok(Math.abs(doubleSens.dx - normalSens.dx * 2) < 1e-9);
+  assert.ok(Math.abs(doubleSens.dy - normalSens.dy * 2) < 1e-9);
+
+  const inverted = computeTrackpadDelta(5, -3, 0.016, Object.assign({}, SETTINGS, { invertX: true, invertY: true }));
+  assert.ok(Math.abs(inverted.dx + normalSens.dx) < 1e-9);
+  assert.ok(Math.abs(inverted.dy + normalSens.dy) < 1e-9);
+});
+
+test("createPointer.handleTrackpad accumula movimenti anche a giroscopio spento", () => {
+  let t = 1000;
+  const pointer = createPointer({ getSettings: () => SETTINGS, now: () => t });
+  pointer.setEnabled(false); // giroscopio spento in modalità trackpad
+  pointer.resetTrackpad();
+  pointer.handleTrackpad(10, -5);
+  t += 16;
+  pointer.handleTrackpad(10, -5);
+  const d = pointer.takeDelta();
+  assert.ok(d.dx > 15, `dx=${d.dx}`);
+  assert.ok(d.dy < -7, `dy=${d.dy}`);
+  assert.deepEqual(pointer.takeDelta(), { dx: 0, dy: 0 });
 });

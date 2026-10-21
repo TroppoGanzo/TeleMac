@@ -18,31 +18,33 @@ OUT="${1:-$ROOT/build}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 APP="$OUT/TeleMac.app"
-VERSION="${TELEMAC_VERSION:-4.0}"
+VERSION="${TELEMAC_VERSION:-5.0}"
 BUILD="${TELEMAC_BUILD:-$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)}"
 MIN_MACOS="12.0"
 
 echo "==> TeleMac $VERSION ($BUILD)"
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+# Si compila e si firma in una cartella temporanea: se il progetto è sulla
+# Scrivania, iCloud può aggiungere attributi (com.apple.FinderInfo) che fanno
+# fallire swiftc o codesign.
+SRC="$(mktemp -d)"
+trap 'rm -rf "$SRC"' EXIT
+STAGE_APP="$SRC/TeleMac.app"
+mkdir -p "$STAGE_APP/Contents/MacOS" "$STAGE_APP/Contents/Resources"
 
 echo "==> Compilo l'app (Apple Silicon + Intel)"
+cp "$ROOT"/macos/TeleMac/*.swift "$SRC/"
 for arch in arm64 x86_64; do
-  swiftc -O -target "$arch-apple-macos$MIN_MACOS" \
-    -o "$OUT/TeleMac-$arch" "$ROOT"/macos/TeleMac/*.swift
+  swiftc -O -target "$arch-apple-macos$MIN_MACOS" -o "$SRC/TeleMac-$arch" "$SRC"/*.swift
 done
-lipo -create "$OUT/TeleMac-arm64" "$OUT/TeleMac-x86_64" -output "$APP/Contents/MacOS/TeleMac"
-rm -f "$OUT/TeleMac-arm64" "$OUT/TeleMac-x86_64"
+lipo -create "$SRC/TeleMac-arm64" "$SRC/TeleMac-x86_64" -output "$STAGE_APP/Contents/MacOS/TeleMac"
 
-sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" "$ROOT/macos/Info.plist" > "$APP/Contents/Info.plist"
-printf 'APPL????' > "$APP/Contents/PkgInfo"
-cp "$ROOT/macos/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" "$ROOT/macos/Info.plist" > "$STAGE_APP/Contents/Info.plist"
+printf 'APPL????' > "$STAGE_APP/Contents/PkgInfo"
+cp "$ROOT/macos/AppIcon.icns" "$STAGE_APP/Contents/Resources/AppIcon.icns"
 
-echo "==> Copio il server e le pagine"
-for dir in telemac web; do
-  rsync -a --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' \
-    "$ROOT/$dir/" "$APP/Contents/Resources/$dir/"
-done
+echo "==> Copio le pagine web"
+rsync -a --exclude '.DS_Store' "$ROOT/web/" "$STAGE_APP/Contents/Resources/web/"
+xattr -cr "$STAGE_APP"
 
 # ---- firma ----
 IDENTITY="${TELEMAC_SIGN_IDENTITY:-}"
@@ -67,20 +69,23 @@ esac
 
 echo "==> Firmo come: $IDENTITY"
 codesign --force --options runtime $TIMESTAMP ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} \
-  --sign "$IDENTITY" "$APP"
-codesign --verify --strict --verbose=2 "$APP"
-codesign -dv "$APP" 2>&1 | grep -E "Identifier|Authority|TeamIdentifier" || true
+  --sign "$IDENTITY" "$STAGE_APP"
+codesign --verify --strict --verbose=2 "$STAGE_APP"
+codesign -dv "$STAGE_APP" 2>&1 | grep -E "Identifier|Authority|TeamIdentifier" || true
+
+rm -rf "$APP"
+ditto "$STAGE_APP" "$APP"
 
 if [ "$MAKE_DMG" = 1 ]; then
   echo "==> Creo TeleMac.dmg"
-  STAGE="$OUT/dmg"
+  STAGE="$SRC/dmg"
   rm -rf "$STAGE" "$OUT/TeleMac.dmg"
   mkdir -p "$STAGE"
-  cp -R "$APP" "$STAGE/"
+  ditto "$STAGE_APP" "$STAGE/TeleMac.app"
   ln -s /Applications "$STAGE/Applicazioni"
-  hdiutil create -volname "TeleMac" -srcfolder "$STAGE" -ov -format UDZO "$OUT/TeleMac.dmg" >/dev/null
-  rm -rf "$STAGE"
-  codesign --force $TIMESTAMP ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} --sign "$IDENTITY" "$OUT/TeleMac.dmg"
+  hdiutil create -volname "TeleMac" -srcfolder "$STAGE" -ov -format UDZO "$SRC/TeleMac.dmg" >/dev/null
+  codesign --force $TIMESTAMP ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} --sign "$IDENTITY" "$SRC/TeleMac.dmg"
+  cp "$SRC/TeleMac.dmg" "$OUT/TeleMac.dmg"
   echo "    $OUT/TeleMac.dmg"
 fi
 

@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="./icon-180.png">
 <link rel="icon" href="./icon-192.png">
 <link rel="manifest" href="./manifest.json">
-<link rel="stylesheet" href="./style.css?v=6">
+<link rel="stylesheet" href="./style.css?v=8">
 </head>
 <body>
 
@@ -26,13 +26,13 @@
     <div class="pairing-icon">
       <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M10 18h4"/></svg>
     </div>
-    <h1>Collega il tuo Mac</h1>
-    <p>Sul Mac apparirà un codice a 6 cifre: inseriscilo qui per abbinare questo iPhone.</p>
-    <button id="pair-start-btn" class="btn-primary" type="button">Mostra il codice sul Mac</button>
+    <h1>Abbina questo iPhone</h1>
+    <p>Inserisci il codice a 6 cifre mostrato sullo schermo del Mac:</p>
     <input id="pair-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*"
-      maxlength="6" placeholder="• • • • • •" aria-label="Codice a 6 cifre">
+      maxlength="6" placeholder="• • • • • •" aria-label="Codice a 6 cifre" autofocus>
     <p id="pair-status" class="pairing-status"></p>
     <p id="pair-error" class="pairing-error"></p>
+    <button id="pair-start-btn" class="btn-primary" type="button" style="margin-top:12px;background:var(--surface-2);color:var(--text)">Nuovo codice sul Mac</button>
   </div>
 </div>
 
@@ -222,11 +222,18 @@
       <div class="group">
         <h2>Impostazioni puntatore</h2>
         <div class="list">
+          <div class="setting-row">
+            <span>Modalità</span>
+            <div class="segmented" id="pointer-mode">
+              <button class="pointer-mode-btn active" type="button" data-mode="gyro">Giroscopio</button>
+              <button class="pointer-mode-btn" type="button" data-mode="trackpad">Trackpad</button>
+            </div>
+          </div>
           <label class="setting-row">
             <span>Sensibilità</span>
             <input id="setting-sensitivity" type="range" min="5" max="60" step="1" value="20">
           </label>
-          <label class="setting-row">
+          <label id="row-stabilization" class="setting-row">
             <span>Stabilizzazione</span>
             <input id="setting-stabilization" type="range" min="0" max="100" step="5" value="50">
           </label>
@@ -286,7 +293,7 @@
 </main>
 
 
-<script src="./pointer.js?v=6"></script>
-<script src="./app.js?v=6"></script>
+<script src="./pointer.js?v=8"></script>
+<script src="./app.js?v=8"></script>
 </body>
 </html>

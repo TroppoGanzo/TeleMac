@@ -1,10 +1,12 @@
 // TeleMac.app — l'app per Mac di TeleMac, di Edoardo Ciarlo.
 //
 // Una finestra normale che mostra il QR da inquadrare con l'iPhone e il codice
-// di abbinamento. Il "motore" resta il server in Python (Resources/telemac):
-// l'app lo avvia in silenzio, senza Terminale e senza icona di Python nel Dock,
-// e lo ferma quando si chiude. La finestra è una pagina locale (web/panel.html)
-// servita dal server solo su 127.0.0.1 e protetta da un gettone segreto.
+// di abbinamento. Il server (HTTPS + WebSocket, certificati, abbinamento,
+// controllo di mouse e tastiera) è codice Swift dentro l'app, negli altri file di
+// questa cartella: niente Python, niente processi di sfondo. La finestra è
+// la pagina web/panel.html, servita da dentro l'app con uno schema "telemac://".
+//
+// Con --headless parte solo il server, senza finestre: serve alle prove automatiche.
 
 import ApplicationServices
 import Cocoa
@@ -17,181 +19,30 @@ let legacyAgentLabel = "io.github.troppoganzo.telemac"
 let windowBackground = NSColor(srgbRed: 0x03 / 255.0, green: 0x11 / 255.0, blue: 0x1a / 255.0, alpha: 1)
 let accessibilitySettingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
-// MARK: - Server Python
+// MARK: - Registro
 
-final class ServerProcess {
-    enum Failure {
-        case pythonMissing
-        case portInUse
-        case crashed(String)
-    }
-
-    var onEvent: (([String: Any]) -> Void)?
-    var onExit: ((Failure?) -> Void)?
-
-    private var process: Process?
-    private var stdinPipe: Pipe?
-    private var buffer = Data()
-    private var stopping = false
-    private var portInUse = false
-    private let log: FileHandle?
-    private let logURL: URL
-
-    init() {
-        let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs")
-        try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
-        logURL = logs.appendingPathComponent("TeleMac.log")
-        // Il log non deve crescere all'infinito: oltre 1 MB si riparte da zero.
-        if let size = (try? FileManager.default.attributesOfItem(atPath: logURL.path))?[.size] as? NSNumber,
-           size.intValue > 1_000_000 {
-            try? FileManager.default.removeItem(at: logURL)
+/// Il registro è ~/Library/Logs/TeleMac.log; oltre 1 MB si riparte da zero.
+enum AppLog {
+    static let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/TeleMac.log")
+    private static let handle: FileHandle? = {
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber, size.intValue > 1_000_000 {
+            try? FileManager.default.removeItem(at: url)
         }
-        if !FileManager.default.fileExists(atPath: logURL.path) {
-            FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        }
-        log = try? FileHandle(forWritingTo: logURL)
-        log?.seekToEndOfFile()
-    }
+        if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
+        let h = try? FileHandle(forWritingTo: url)
+        h?.seekToEndOfFile()
+        return h
+    }()
 
-    static func findPython() -> String? {
-        let fm = FileManager.default
-        if let custom = ProcessInfo.processInfo.environment["TELEMAC_PYTHON"], fm.isExecutableFile(atPath: custom) {
-            return custom
-        }
-        // /usr/bin/python3 funziona solo se ci sono gli strumenti per sviluppatori
-        // (altrimenti apre la finestra per installarli): prima controlliamo.
-        let developerPythons = [
-            "/Library/Developer/CommandLineTools/usr/bin/python3",
-            "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
-        ]
-        if developerPythons.contains(where: { fm.isExecutableFile(atPath: $0) }) {
-            return "/usr/bin/python3"
-        }
-        let others = [
-            "/opt/homebrew/bin/python3",
-            "/usr/local/bin/python3",
-            "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
-        ]
-        return others.first(where: { fm.isExecutableFile(atPath: $0) })
-    }
-
-    func writeLog(_ text: String) {
+    static func write(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
-        log?.write(data)
+        handle?.write(data)
     }
 
-    func logTail(maxBytes: Int = 1500) -> String {
-        guard let data = try? Data(contentsOf: logURL) else { return "" }
-        let tail = data.suffix(maxBytes)
-        return String(decoding: tail, as: UTF8.self)
-    }
-
-    func start(token: String) {
-        guard let python = ServerProcess.findPython() else {
-            onExit?(.pythonMissing)
-            return
-        }
-        guard let resources = Bundle.main.resourceURL else { return }
-        let script = resources.appendingPathComponent("telemac/server.py").path
-
-        stopping = false
-        portInUse = false
-        buffer = Data()
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: python)
-        proc.arguments = [script, "--app"]
-        var env = ProcessInfo.processInfo.environment
-        env["PYTHONUNBUFFERED"] = "1"
-        env["TELEMAC_PANEL_TOKEN"] = token
-        // Mai scrivere __pycache__ dentro l'app: romperebbe la firma.
-        env["PYTHONDONTWRITEBYTECODE"] = "1"
-        proc.environment = env
-
-        let out = Pipe()
-        let err = Pipe()
-        let input = Pipe()
-        proc.standardOutput = out
-        proc.standardError = err
-        proc.standardInput = input
-        stdinPipe = input
-
-        out.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            DispatchQueue.main.async { self?.consume(data) }
-        }
-        err.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            DispatchQueue.main.async { self?.log?.write(data) }
-        }
-        proc.terminationHandler = { [weak self] p in
-            out.fileHandleForReading.readabilityHandler = nil
-            err.fileHandleForReading.readabilityHandler = nil
-            let status = p.terminationStatus
-            DispatchQueue.main.async { self?.finished(p, status: status) }
-        }
-
-        writeLog("\n--- \(Date()) avvio del server con \(python)\n")
-        do {
-            try proc.run()
-            process = proc
-        } catch {
-            writeLog("Impossibile avviare Python: \(error)\n")
-            onExit?(.crashed("Impossibile avviare Python: \(error.localizedDescription)"))
-        }
-    }
-
-    private func consume(_ data: Data) {
-        buffer.append(data)
-        while let newline = buffer.firstIndex(of: 0x0A) {
-            let lineData = buffer.subdata(in: buffer.startIndex..<newline)
-            buffer.removeSubrange(buffer.startIndex...newline)
-            let line = String(decoding: lineData, as: UTF8.self)
-            let prefix = "@telemac "
-            if line.hasPrefix(prefix),
-               let json = line.dropFirst(prefix.count).data(using: .utf8),
-               let event = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any] {
-                if event["event"] as? String == "error", event["code"] as? String == "port_in_use" {
-                    portInUse = true
-                }
-                onEvent?(event)
-            } else {
-                writeLog(line + "\n")
-            }
-        }
-    }
-
-    private func finished(_ proc: Process, status: Int32) {
-        guard proc === process else { return }  // un server vecchio, già fermato da stop()
-        process = nil
-        stdinPipe = nil
-        writeLog("--- server terminato (codice \(status))\n")
-        if stopping { return }
-        if portInUse {
-            onExit?(.portInUse)
-        } else {
-            onExit?(.crashed(logTail()))
-        }
-    }
-
-    func stop() {
-        stopping = true
-        guard let proc = process else { return }
-        process = nil
-        guard proc.isRunning else { return }
-        // Chiudere lo stdin basta già a fermarlo; SIGTERM per sicurezza. Il
-        // server rimette a posto il cursore prima di uscire.
-        try? stdinPipe?.fileHandleForWriting.close()
-        proc.terminate()
-        let deadline = Date().addingTimeInterval(2)
-        while proc.isRunning && Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-        }
-        if proc.isRunning {
-            kill(proc.processIdentifier, SIGKILL)
-        }
+    static func tail(maxBytes: Int = 1500) -> String {
+        guard let data = try? Data(contentsOf: url) else { return "" }
+        return String(decoding: data.suffix(maxBytes), as: UTF8.self)
     }
 }
 
@@ -226,17 +77,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     WKNavigationDelegate {
     var window: NSWindow!
     var webView: WKWebView!
-    let server = ServerProcess()
+    var server: TeleMacServer?
+    let panelHandler = PanelSchemeHandler(webDir: Bundle.main.resourceURL!.appendingPathComponent("web"))
     var panelURL: URL?
     var launchedAtLogin = false
-    var crashCount = 0
-    var serverStartedAt = Date()
     var hiddenBeforeCode = false
     var axTimer: Timer?
     var lastAxTrusted: Bool?
 
     var version: String {
-        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "4.0"
+        (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "5.0"
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -253,19 +103,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
 
         // Aperta dal DMG o dai Download: si installa in Applicazioni e si
         // riapre da lì. Questa copia ha finito il suo lavoro.
-        if Installer.installIfNeeded(log: { [weak self] text in self?.server.writeLog(text) }) {
+        if Installer.installIfNeeded(log: { text in AppLog.write(text) }) {
             showMessage(title: "Installo TeleMac…", body: "La sposto in Applicazioni, come un'app normale.")
             showWindow()
             return
         }
-        Installer.cleanUpAfterLaunch(log: { [weak self] text in
-            DispatchQueue.main.async { self?.server.writeLog(text) }
+        Installer.cleanUpAfterLaunch(log: { text in
+            DispatchQueue.main.async { AppLog.write(text) }
         })
         removeLegacyLaunchAgent()
         showMessage(title: "Avvio di TeleMac…", body: "Un attimo, sto accendendo il telecomando.")
         if !launchedAtLogin {
             showWindow()
         }
+
+        // Assicura che la dimensione del cursore sia normale (1.0).
+        MacBackend().cursorRestore()
 
         // La prima volta macOS mette TeleMac nell'elenco di Accessibilità e
         // chiede il permesso: senza, il Mac ignorerebbe i comandi dell'iPhone.
@@ -279,8 +132,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
             if trusted != self.lastAxTrusted { self.pushNativeState() }
         }
 
-        server.onEvent = { [weak self] event in self?.handleServerEvent(event) }
-        server.onExit = { [weak self] failure in self?.handleServerExit(failure) }
         startServer()
     }
 
@@ -295,7 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
 
     func applicationWillTerminate(_ notification: Notification) {
         axTimer?.invalidate()
-        server.stop()
+        server?.stop()
+        MacBackend().cursorRestore()
     }
 
     // MARK: Finestra
@@ -320,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
 
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "telemac")
+        config.setURLSchemeHandler(panelHandler, forURLScheme: "telemac")
         webView = WKWebView(frame: window.contentView!.bounds, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
@@ -346,23 +199,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
     // MARK: Server
 
     func startServer() {
-        serverStartedAt = Date()
-        server.start(token: UUID().uuidString + UUID().uuidString)
+        server?.stop()
+        var options = TeleMacServer.Options(webDir: Bundle.main.resourceURL!.appendingPathComponent("web"))
+        options.dryRun = ProcessInfo.processInfo.environment["TELEMAC_DRY_RUN"] != nil
+        let new = TeleMacServer(options)
+        new.onEvent = { [weak self] event in self?.handleServerEvent(event) }
+        server = new
+        panelHandler.server = new
+        AppLog.write("\n--- \(Date()) avvio del server\n")
+        new.start()
     }
 
-    func handleServerEvent(_ event: [String: Any]) {
-        switch event["event"] as? String {
-        case "ready":
-            if let s = event["panel"] as? String, let url = URL(string: s) {
-                panelURL = url
-                webView.load(URLRequest(url: url))
-            }
-        case "pair_code":
+    func handleServerEvent(_ event: TeleMacServer.Event) {
+        switch event {
+        case .ready:
+            let url = URL(string: "telemac://panel/")!
+            panelURL = url
+            webView.load(URLRequest(url: url))
+        case .pairCode:
             // Il codice deve comparire sullo schermo (quindi sulla TV) anche
             // se la finestra era nascosta.
             hiddenBeforeCode = !window.isVisible || !NSApp.isActive
             showWindow()
-        case "paired":
+        case .paired:
             if hiddenBeforeCode {
                 hiddenBeforeCode = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -370,37 +229,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
                     NSApp.hide(nil)
                 }
             }
-        default:
+        case .accessibility:
+            pushNativeState()
+        case .pairDone:
             break
-        }
-    }
-
-    func handleServerExit(_ failure: ServerProcess.Failure?) {
-        guard let failure = failure else { return }
-        switch failure {
-        case .pythonMissing:
-            showMessage(
-                title: "Manca Python",
-                body: "TeleMac usa Python, che su macOS arriva con gli “strumenti per sviluppatori”. Installali (gratis, ci vogliono pochi minuti) e poi tocca Riprova.",
-                buttons: [("Installa gli strumenti", "installTools"), ("Riprova", "restart")])
-            showWindow()
         case .portInUse:
+            AppLog.write("Porta occupata: un'altra copia di TeleMac è già accesa\n")
             showMessage(
                 title: "TeleMac è già acceso",
-                body: "Un'altra copia di TeleMac (per esempio avviata dal Terminale) sta già usando la rete. Chiudila e tocca Riprova.",
+                body: "Un'altra copia di TeleMac (o un altro programma) sta già usando la porta. Chiudila e tocca Riprova.",
                 buttons: [("Riprova", "restart")])
             showWindow()
-        case .crashed(let tail):
-            // Se era partito bene e poi si è fermato, lo riaccendiamo da soli (poche volte).
-            if Date().timeIntervalSince(serverStartedAt) > 20 && crashCount < 3 {
-                crashCount += 1
-                startServer()
-                return
-            }
+        case .failed(let message):
+            AppLog.write("Errore del server: \(message)\n")
             showMessage(
                 title: "Il server si è fermato",
                 body: "Qualcosa è andato storto. Dettagli qui sotto (il registro completo è in ~/Library/Logs/TeleMac.log).",
-                detail: tail,
+                detail: message,
                 buttons: [("Riprova", "restart"), ("Apri il registro", "openLog")])
             showWindow()
         }
@@ -459,18 +304,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
                 .appendingPathComponent(".telemac/TeleMac.mobileconfig")
             NSWorkspace.shared.activateFileViewerSelecting([profile])
         case "restart":
-            crashCount = 0
             showMessage(title: "Avvio di TeleMac…", body: "Un attimo, sto accendendo il telecomando.")
-            server.stop()
             startServer()
-        case "installTools":
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
-            proc.arguments = ["--install"]
-            try? proc.run()
         case "openLog":
-            let logURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/TeleMac.log")
-            NSWorkspace.shared.open(logURL)
+            NSWorkspace.shared.open(AppLog.url)
         default:
             break
         }
@@ -548,7 +385,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         try? proc.run()
         proc.waitUntilExit()
         try? FileManager.default.removeItem(at: plist)
-        server.writeLog("Rimosso il vecchio LaunchAgent \(plist.path)\n")
+        AppLog.write("Rimosso il vecchio LaunchAgent \(plist.path)\n")
     }
 
     // MARK: Menu
@@ -605,6 +442,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         NSApp.activate(ignoringOtherApps: true)
     }
 }
+
+if CommandLine.arguments.contains("--headless") { Headless.run(CommandLine.arguments) }
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

@@ -26,14 +26,25 @@ function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
 
 /* ---------- Impostazioni (localStorage, con try/catch) ---------- */
 
+// Prima di loadSettings: la usa per scegliere il trackpad sulla pagina HTTP.
+/* Modalità demo (GitHub Pages) */
+const demoMode = location.hostname.endsWith("github.io") || /(?:^|[?&])demo(?:=|&|$)/.test(location.search);
+
 const SETTINGS_KEY = "telemac-settings";
 const TOKEN_KEY = "telemac-token";
-const DEFAULT_SETTINGS = { pointerOn: true, stabilization: 0.5, cursorScale: 2.5, sensitivity: 20, invertX: false, invertY: false, playMode: "media", vibration: true };
+const DEFAULT_SETTINGS = { pointerOn: true, pointerMode: "gyro", stabilization: 0.5, cursorScale: 1, sensitivity: 20, invertX: false, invertY: false, playMode: "media", vibration: true };
 
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return Object.assign({}, DEFAULT_SETTINGS, raw ? JSON.parse(raw) : {});
+    const defaults = Object.assign({}, DEFAULT_SETTINGS);
+    if (location.protocol === "http:" && !demoMode) {
+      defaults.pointerMode = "trackpad";
+    }
+    const loaded = Object.assign({}, defaults, raw ? JSON.parse(raw) : {});
+    // Su HTTP Safari non dà il giroscopio: resta solo il trackpad.
+    if (location.protocol === "http:" && !demoMode) loaded.pointerMode = "trackpad";
+    return loaded;
   } catch (e) {
     return Object.assign({}, DEFAULT_SETTINGS);
   }
@@ -78,10 +89,6 @@ function haptic() {
     label.remove();
   } catch (e) { /* niente: nessuna vibrazione disponibile */ }
 }
-
-/* ---------- Modalità demo (GitHub Pages) ---------- */
-
-const demoMode = location.hostname.endsWith("github.io") || /(?:^|[?&])demo(?:=|&|$)/.test(location.search);
 
 /* ---------- Isola di stato (finta Dynamic Island) ---------- */
 
@@ -190,6 +197,10 @@ window.addEventListener("devicemotion", () => { motionSeen = true; }, { once: tr
 
 async function askMotionPermission() {
   if (motionGranted) return true;
+  if (location.protocol === "http:" && !demoMode) {
+    island.show({ text: "Il giroscopio richiede HTTPS e il certificato", tone: "warn", ms: 3500 });
+    return false;
+  }
   if (typeof DeviceMotionEvent === "undefined" || typeof DeviceMotionEvent.requestPermission !== "function") {
     motionGranted = true;
     return true;
@@ -207,41 +218,69 @@ async function askMotionPermission() {
   return motionGranted;
 }
 
+function isTrackpadMode() {
+  return settings.pointerMode === "trackpad";
+}
+
 // Cursore del Mac ingrandito mentre usi il puntatore (così lo vedi dal divano).
 let cursorWarned = false;
 function syncCursorSize() {
   send({ type: "cursor", scale: pointerOn ? settings.cursorScale : 1 });
 }
 
+function syncPointerModeUI() {
+  const trackpad = isTrackpadMode();
+  pointerEngine.setEnabled(pointerOn && !trackpad);
+  // A puntatore spento torna il cerchio con "OK" al centro.
+  clickpad.classList.toggle("trackpad", trackpad && pointerOn);
+  const gyroBtn = $('.pointer-mode-btn[data-mode="gyro"]');
+  if (gyroBtn) gyroBtn.disabled = location.protocol === "http:" && !demoMode;
+  $("#btn-power").setAttribute("aria-label", trackpad ? "Trackpad" : "Puntatore a giroscopio");
+  $$(".pointer-mode-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === settings.pointerMode));
+  const stabRow = $("#row-stabilization");
+  const recalBtn = $("#btn-recalibrate");
+  if (stabRow) stabRow.hidden = trackpad;
+  if (recalBtn) recalBtn.hidden = trackpad;
+}
+
 function setPointerOn(on) {
   pointerOn = on;
   settings.pointerOn = on;
   saveSettings();
-  pointerEngine.setEnabled(on);
+  pointerEngine.setEnabled(on && !isTrackpadMode());
   $("#btn-power").setAttribute("aria-checked", on ? "true" : "false");
   clickpad.classList.toggle("pointer-off", !on);
+  syncPointerModeUI();
   syncCursorSize();
 }
 
 async function togglePointer() {
   if (pointerOn) {
     setPointerOn(false);
-    island.show({ text: "Puntatore spento", tone: "info", ms: 900 });
+    island.show({ text: isTrackpadMode() ? "Trackpad spento" : "Puntatore spento", tone: "info", ms: 900 });
     return;
   }
   setPointerOn(true);
+  if (isTrackpadMode()) {
+    island.show({ text: "Trackpad acceso", tone: "ok", ms: 900 });
+    return;
+  }
   if (await askMotionPermission()) island.show({ text: "Puntatore acceso", tone: "ok", ms: 900 });
   else setPointerOn(false);
 }
 
-document.addEventListener("pointerdown", () => { if (pointerOn) askMotionPermission(); }, { capture: true, once: true });
+document.addEventListener("pointerdown", () => { if (pointerOn && !isTrackpadMode()) askMotionPermission(); }, { capture: true, once: true });
 
-// Invia i movimenti accumulati una volta per fotogramma.
-(function pointerLoop() {
+function flushPointerDelta() {
   const d = pointerEngine.takeDelta();
   const dx = Math.round(d.dx * 100) / 100;
   const dy = Math.round(d.dy * 100) / 100;
   if (dx !== 0 || dy !== 0) send({ type: "move", dx: dx, dy: dy });
+}
+
+// Invia i movimenti accumulati una volta per fotogramma.
+(function pointerLoop() {
+  flushPointerDelta();
   requestAnimationFrame(pointerLoop);
 })();
 
@@ -382,32 +421,46 @@ document.addEventListener("visibilitychange", () => {
 /* ---------- Abbinamento ---------- */
 
 const pairingEl = $("#pairing");
-function showPairing() { if (!demoMode) pairingEl.hidden = false; }
+let pairingRequestInFlight = false;
+
+async function requestPairCode(explicit) {
+  if (pairingRequestInFlight) return;
+  pairingRequestInFlight = true;
+  setPairError("");
+  setPairStatus(explicit ? "Richiesta codice in corso…" : "Connessione al Mac…");
+  try {
+    const res = await fetch("./api/pair/start", { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      setPairStatus("Digita il codice a 6 cifre mostrato sullo schermo del Mac");
+      $("#pair-code").focus();
+    } else if (data.error === "too_fast") {
+      setPairStatus("Controlla il codice a 6 cifre sullo schermo del Mac");
+      $("#pair-code").focus();
+    } else {
+      setPairStatus("");
+      setPairError("Tocca 'Nuovo codice' per riprovare.");
+    }
+  } catch (e) {
+    setPairStatus("");
+    setPairError("Impossibile contattare il Mac: controlla che sia sulla stessa rete.");
+  } finally {
+    pairingRequestInFlight = false;
+  }
+}
+
+function showPairing() {
+  if (!demoMode) {
+    pairingEl.hidden = false;
+    requestPairCode(false);
+  }
+}
 function hidePairing() { pairingEl.hidden = true; }
 
 function setPairStatus(text) { $("#pair-status").textContent = text || ""; }
 function setPairError(text) { $("#pair-error").textContent = text || ""; }
 
-$("#pair-start-btn").addEventListener("click", async () => {
-  setPairError("");
-  setPairStatus("Richiesta in corso…");
-  try {
-    const res = await fetch("./api/pair/start", { method: "POST" });
-    const data = await res.json();
-    if (data.ok) {
-      setPairStatus("Codice mostrato sul Mac. Hai " + data.expires_in + " secondi per digitarlo.");
-      $("#pair-code").focus();
-    } else if (data.error === "too_fast") {
-      setPairStatus("Aspetta qualche secondo e riprova.");
-    } else {
-      setPairStatus("");
-      setPairError("Errore imprevisto: riprova.");
-    }
-  } catch (e) {
-    setPairStatus("");
-    setPairError("Impossibile contattare il Mac: controlla la rete.");
-  }
-});
+$("#pair-start-btn").addEventListener("click", () => requestPairCode(true));
 
 const pairCodeInput = $("#pair-code");
 pairCodeInput.addEventListener("input", () => {
@@ -513,6 +566,10 @@ let padHoldTimer = null;
 let centerHoldTimer = null;
 let centerFreezeRenew = null;
 let centerDragging = false;
+let trackpadTouch = null;
+const padPointers = new Map();
+
+const TRACKPAD_INNER = 0.74;  // deve combaciare con .clickpad.trackpad .pad-center (74%)
 
 function zoneFromPoint(clientX, clientY) {
   const rect = clickpad.getBoundingClientRect();
@@ -520,8 +577,10 @@ function zoneFromPoint(clientX, clientY) {
   const cy = rect.top + rect.height / 2;
   const dx = clientX - cx;
   const dy = clientY - cy;
-  const dist = Math.hypot(dx, dy);
-  if (dist < (rect.width / 2) * 0.45) return "center";
+  if (pointerOn && isTrackpadMode()) {
+    // Trackpad quadrato: il bordo (fascia esterna) resta frecce/volume.
+    if (Math.max(Math.abs(dx) / (rect.width / 2), Math.abs(dy) / (rect.height / 2)) < TRACKPAD_INNER) return "center";
+  } else if (Math.hypot(dx, dy) < (rect.width / 2) * 0.45) return "center";
   if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "right" : "left";
   return dy > 0 ? "down" : "up";
 }
@@ -534,18 +593,61 @@ function setGlow(dir, on) {
 function sendArrow(dir) { send({ type: "key", name: dir, mods: [] }); }
 
 
-function centerDown() {
+function centerDown(e) {
   if (!pointerOn) return;  // a puntatore spento il centro è "OK": si invia al rilascio
+  centerDragging = false;
+  if (isTrackpadMode()) {
+    pointerEngine.resetTrackpad();
+    trackpadTouch = {
+      id: e ? e.pointerId : null,
+      startX: e ? e.clientX : 0,
+      startY: e ? e.clientY : 0,
+      lastX: e ? e.clientX : 0,
+      lastY: e ? e.clientY : 0,
+      moved: false,
+    };
+    centerHoldTimer = setTimeout(() => {
+      if (trackpadTouch && trackpadTouch.moved) return;
+      centerDragging = true;
+      clickpad.classList.remove("pressed-center");
+      clickpad.classList.add("dragging");
+      haptic();
+      send({ type: "button", button: "left", down: true });
+    }, 350);
+    return;
+  }
   pointerEngine.freeze(250);
   clearInterval(centerFreezeRenew);
   centerFreezeRenew = setInterval(() => pointerEngine.freeze(250), 100);
-  centerDragging = false;
   centerHoldTimer = setTimeout(() => {
     centerDragging = true;
     clickpad.classList.add("dragging");
     send({ type: "button", button: "left", down: true });
   }, 350);
 }
+
+function centerMove(e) {
+  if (!pointerOn || !isTrackpadMode() || !trackpadTouch) return;
+  if (trackpadTouch.id !== null && e.pointerId !== trackpadTouch.id) return;
+  const rawDx = e.clientX - trackpadTouch.lastX;
+  const rawDy = e.clientY - trackpadTouch.lastY;
+  trackpadTouch.lastX = e.clientX;
+  trackpadTouch.lastY = e.clientY;
+  if (!trackpadTouch.moved) {
+    if (Math.hypot(e.clientX - trackpadTouch.startX, e.clientY - trackpadTouch.startY) > 5) {
+      trackpadTouch.moved = true;
+      if (!centerDragging) {
+        clearTimeout(centerHoldTimer);
+        centerHoldTimer = null;
+        clickpad.classList.remove("pressed-center");
+      }
+    }
+  }
+  if (trackpadTouch.moved || centerDragging) {
+    pointerEngine.handleTrackpad(rawDx, rawDy);
+  }
+}
+
 function centerUp() {
   if (!pointerOn) {
     send({ type: "key", name: "return", mods: [] });
@@ -555,14 +657,17 @@ function centerUp() {
   clearInterval(centerFreezeRenew);
   centerHoldTimer = null;
   centerFreezeRenew = null;
+  flushPointerDelta();
+  const moved = isTrackpadMode() && trackpadTouch && trackpadTouch.moved;
   if (centerDragging) {
     send({ type: "button", button: "left", down: false });
-  } else {
+  } else if (!moved) {
     send({ type: "click", button: "left" });
   }
   centerDragging = false;
+  trackpadTouch = null;
   clickpad.classList.remove("dragging");
-  pointerEngine.freeze(120);
+  if (!isTrackpadMode()) pointerEngine.freeze(120);
 }
 
 /* Anello: un tocco = freccia. Tenendo il dito fermo per un attimo (o
@@ -573,7 +678,7 @@ function centerUp() {
 const KNOB_HOLD_MS = 350;   // dito fermo sull'anello: diventa manopola
 const KNOB_START_DEG = 25;  // oppure: rotazione che la attiva subito
 const KNOB_STEP_DEG = 18;   // uno scatto di volume ogni tot gradi
-let ring = null;            // {zone, mode: "pending"|"knob", lastAngle, acc}
+let ring = null;            // {zone, mode: "pending"|"knob", lastAngle, acc, startX, startY}
 const knobArm = $("#knob-dot-arm");
 const knobSign = $("#knob-sign");
 
@@ -609,13 +714,39 @@ function enterKnob() {
 }
 
 function ringDown(zone, e) {
-  ring = { zone: zone, mode: "pending", lastAngle: angleAt(e.clientX, e.clientY), acc: 0 };
+  ring = { zone: zone, mode: "pending", startX: e.clientX, startY: e.clientY, lastAngle: angleAt(e.clientX, e.clientY), acc: 0 };
   setGlow(zone, true);
   padHoldTimer = setTimeout(enterKnob, KNOB_HOLD_MS);
 }
 
 function ringMove(e) {
   if (!ring) return;
+  if (ring.mode === "pending" && pointerOn && isTrackpadMode()) {
+    const rect = clickpad.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const inner = Math.max(Math.abs(e.clientX - cx) / (rect.width / 2), Math.abs(e.clientY - cy) / (rect.height / 2));
+    const distStart = Math.hypot(e.clientX - ring.startX, e.clientY - ring.startY);
+    if (distStart > 10 && inner < TRACKPAD_INNER) {
+      // Il dito è entrato verso il centro: passa da anello a movimento trackpad.
+      const startX = ring.startX;
+      const startY = ring.startY;
+      clearTimeout(padHoldTimer);
+      setGlow(ring.zone, false);
+      ring = null;
+      padActiveZone = "center";
+      pointerEngine.resetTrackpad();
+      trackpadTouch = {
+        id: e.pointerId,
+        startX: startX,
+        startY: startY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        moved: true,
+      };
+      return;  // niente salto: si muove solo dai prossimi spostamenti del dito
+    }
+  }
   const angle = angleAt(e.clientX, e.clientY);
   let delta = angle - ring.lastAngle;
   if (delta > 180) delta -= 360;
@@ -640,24 +771,71 @@ function ringUp() {
   ring = null;
 }
 
+function cancelSinglePadGesture() {
+  clearTimeout(centerHoldTimer);
+  clearInterval(centerFreezeRenew);
+  clearTimeout(padHoldTimer);
+  centerHoldTimer = null;
+  centerFreezeRenew = null;
+  padHoldTimer = null;
+  if (ring) {
+    setGlow(ring.zone, false);
+    clickpad.classList.remove("knob");
+    ring = null;
+  }
+  if (centerDragging) {
+    send({ type: "button", button: "left", down: false });
+    centerDragging = false;
+  }
+  trackpadTouch = null;
+  clickpad.classList.remove("pressed-center", "dragging");
+}
+
 clickpad.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   try { clickpad.setPointerCapture(e.pointerId); } catch (err) { /* niente */ }
+  padPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointerOn && isTrackpadMode() && padPointers.size >= 2) {
+    cancelSinglePadGesture();
+    padActiveZone = "scroll";
+    return;
+  }
   const zone = zoneFromPoint(e.clientX, e.clientY);
   padActiveZone = zone;
   haptic();
   if (zone === "center") {
     clickpad.classList.add("pressed-center");
-    centerDown();
+    centerDown(e);
   } else {
     ringDown(zone, e);
   }
 });
 clickpad.addEventListener("pointermove", (e) => {
-  if (padActiveZone && padActiveZone !== "center") ringMove(e);
+  if (padActiveZone === "scroll") {
+    const prev = padPointers.get(e.pointerId);
+    if (!prev) return;
+    const rawDx = e.clientX - prev.x;
+    const rawDy = e.clientY - prev.y;
+    prev.x = e.clientX;
+    prev.y = e.clientY;
+    const n = Math.max(1, padPointers.size);
+    const sdx = Math.round(((settings.invertX ? -rawDx : rawDx) * 0.6 / n) * 10) / 10;
+    const sdy = Math.round(((settings.invertY ? -rawDy : rawDy) * 0.6 / n) * 10) / 10;
+    if (sdx !== 0 || sdy !== 0) send({ type: "scroll", dx: sdx, dy: sdy });
+    return;
+  }
+  const tracked = padPointers.get(e.pointerId);
+  if (tracked) { tracked.x = e.clientX; tracked.y = e.clientY; }
+  if (padActiveZone === "center") centerMove(e);
+  else if (padActiveZone) ringMove(e);
 });
 
-function releasePad() {
+function releasePad(e) {
+  if (e && e.pointerId != null) padPointers.delete(e.pointerId);
+  if (padActiveZone === "scroll") {
+    if (padPointers.size === 0) padActiveZone = null;
+    return;
+  }
   if (!padActiveZone) return;
   if (padActiveZone === "center") {
     clickpad.classList.remove("pressed-center");
@@ -749,6 +927,20 @@ bindClick($("#btn-fullscreenwin"), () => send({ type: "key", name: "f", mods: ["
 bindClick($("#btn-sleep"), () => send({ type: "sleep" }));
 
 /* ---------- Impostazioni ---------- */
+
+$$(".pointer-mode-btn").forEach((btn) => {
+  btn.classList.toggle("active", btn.dataset.mode === settings.pointerMode);
+  btn.addEventListener("click", async () => {
+    haptic();
+    settings.pointerMode = btn.dataset.mode;
+    saveSettings();
+    syncPointerModeUI();
+    if (pointerOn && !isTrackpadMode()) {
+      await askMotionPermission();
+    }
+    island.show({ text: isTrackpadMode() ? "Modalità trackpad" : "Modalità giroscopio", tone: "info", ms: 1200 });
+  });
+});
 
 function bindMiniSwitch(el, key) {
   el.setAttribute("aria-checked", settings[key] ? "true" : "false");
@@ -948,6 +1140,9 @@ if (demoMode) {
 } else {
   connectWS();
 }
+
+window.addEventListener("pagehide", () => send({ type: "cursor", scale: 1 }));
+window.addEventListener("beforeunload", () => send({ type: "cursor", scale: 1 }));
 
 // Esposto solo per verifiche manuali/di test (Playwright): non ha altro scopo.
 window.TeleMacDebug = {

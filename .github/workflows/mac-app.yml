@@ -95,16 +95,11 @@ jobs:
         run: |
           codesign -dv --verbose=2 build/TeleMac.app 2>&1 | grep -E "Identifier|Authority|Format"
           plutil -lint build/TeleMac.app/Contents/Info.plist
-          test -f build/TeleMac.app/Contents/Resources/telemac/server.py
           test -f build/TeleMac.app/Contents/Resources/web/panel.html
-          # Il server deve partire dall'interno dell'app e annunciare il pannello.
-          export TELEMAC_HOME="$RUNNER_TEMP/telemac-home" PYTHONDONTWRITEBYTECODE=1
-          (sleep 20) | python3 build/TeleMac.app/Contents/Resources/telemac/server.py --app --dry-run \
-            --port 0 --setup-port 0 > "$RUNNER_TEMP/server.out" 2>&1 &
-          for i in $(seq 1 30); do grep -q '"ready"' "$RUNNER_TEMP/server.out" && break; sleep 0.5; done
-          cat "$RUNNER_TEMP/server.out"
-          grep -q '"ready"' "$RUNNER_TEMP/server.out"
-          # Nessun __pycache__ dentro l'app: la firma deve restare intatta.
+          # Niente Python dentro l'app: il server è codice Swift.
+          ! find build/TeleMac.app -name '*.py' | grep .
+          # Prove del server vero (modalità --headless --dry-run: il Mac non si muove).
+          TELEMAC_APP="$PWD/build/TeleMac.app" python3 -m unittest tests.test_app -v
           codesign --verify --strict build/TeleMac.app
 
       - name: Comprimi l'app
@@ -121,8 +116,8 @@ jobs:
         if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v4.0.${{ env.TELEMAC_BUILD }}
-          name: TeleMac 4.0 (${{ env.TELEMAC_BUILD }})
+          tag_name: v5.0.${{ env.TELEMAC_BUILD }}
+          name: TeleMac 5.0 (${{ env.TELEMAC_BUILD }})
           make_latest: true
           body: |
             App per Mac firmata da Edoardo Ciarlo.

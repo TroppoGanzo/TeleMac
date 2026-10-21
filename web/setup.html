@@ -138,6 +138,14 @@
     Inquadra il QR nella finestra di TeleMac sul Mac per configurare davvero.
   </div>
 
+  <div class="alt" style="margin:0 0 24px;padding:14px 16px;border-color:var(--hairline-strong)">
+    <div style="font-weight:600;font-size:15px;color:var(--text);margin-bottom:4px">Vuoi usare il Trackpad?</div>
+    <p style="margin:0 0 12px;color:var(--text-2);font-size:13.5px;line-height:1.45">Per il trackpad, la tastiera e i tasti multimediali non serve installare il certificato: puoi aprire il telecomando subito.</p>
+    <a id="direct-trackpad-btn" class="btn" href="/index.html">Apri subito TeleMac (Trackpad)</a>
+  </div>
+
+  <p class="lead" style="margin-bottom:16px;font-size:13.5px">Oppure, se vuoi usare anche il <strong>puntatore ad aria (giroscopio)</strong>, completa questi tre passi una volta sola:</p>
+
   <div class="step">
     <div class="step-num" id="step1-num">1</div>
     <div class="step-body">
@@ -193,7 +201,7 @@ if (isPreview) {
   $("#preview-banner").hidden = false;
   $("#lead").textContent = "Anteprima: " + (cfg.computerName || "il tuo Mac") + " — apri questa pagina dal Mac per configurare davvero.";
 } else {
-  $("#lead").textContent = "Tre passi per collegare questo iPhone a " + (cfg.computerName || "il tuo Mac") + ".";
+  $("#lead").textContent = "Collega questo iPhone a " + (cfg.computerName || "il tuo Mac") + ".";
 }
 
 $("#profile-btn").href = cfg.profileUrl;
@@ -221,12 +229,14 @@ function pingUrl(url) {
     .catch(() => null);
 }
 
-async function verify() {
-  verifyBtn.disabled = true;
-  verifyStatus.className = "status-line info";
-  verifyStatus.textContent = "Verifica in corso…";
-  openBtn.hidden = true;
-  afterOpen.hidden = true;
+async function verify(silent) {
+  if (!silent) {
+    verifyBtn.disabled = true;
+    verifyStatus.className = "status-line info";
+    verifyStatus.textContent = "Verifica in corso…";
+    openBtn.hidden = true;
+    afterOpen.hidden = true;
+  }
 
   const urls = cfg.appUrls || [];
   const results = await Promise.all(urls.map(pingUrl));
@@ -235,6 +245,7 @@ async function verify() {
   verifyBtn.disabled = false;
 
   if (found) {
+    $("#step1-num").classList.add("done");
     $("#step2-num").classList.add("done");
     $("#step3-num").classList.add("done");
     verifyStatus.className = "status-line ok";
@@ -243,7 +254,7 @@ async function verify() {
     openBtn.hidden = false;
     openBtn.classList.remove("disabled");
     afterOpen.hidden = false;
-  } else {
+  } else if (!silent) {
     verifyStatus.className = "status-line err";
     verifyStatus.textContent = "Non risponde ancora: torna al passo 2 e controlla di aver attivato la fiducia per TeleMac CA.";
   }
@@ -255,8 +266,12 @@ verifyBtn.addEventListener("click", () => {
     verifyStatus.textContent = "Anteprima: apri questa pagina dal Mac per verificare davvero.";
     return;
   }
-  verify();
+  verify(false);
 });
+
+if (!isPreview) {
+  verify(true);
+}
 </script>
 </body>
 </html>
