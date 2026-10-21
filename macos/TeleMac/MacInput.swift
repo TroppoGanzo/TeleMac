@@ -168,7 +168,7 @@ final class MacBackend: InputBackend {
            abs(p.x - last.x) < Self.doubleClickDistance, abs(p.y - last.y) < Self.doubleClickDistance {
             count = min(last.count + 1, 3)
         }
-        lastClick = (button, t, p.x, p.y, count)
+        lastClick = (button, t, Double(p.x), Double(p.y), count)
         mouseEvent(button, down: true, clickState: count)
         mouseEvent(button, down: false, clickState: count)
     }
