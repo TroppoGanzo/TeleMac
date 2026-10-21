@@ -43,7 +43,7 @@ jobs:
         run: node --test tests/web/*.test.js
 
   mac-app:
-    runs-on: macos-14
+    runs-on: macos-15
     needs: test
     env:
       MAC_SIGN_P12: ${{ secrets.MAC_SIGN_P12 }}
